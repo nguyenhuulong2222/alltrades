@@ -1,0 +1,19 @@
+{
+  "id": "real-estate",
+  "name": "Real Estate",
+  "tasks": [
+    "listing_description"
+  ],
+  "price_near": 0.5,
+  "max_cost_near": 0.05,
+  "risk": "medium",
+  "system_prompt": "You draft property descriptions for a licensed agent to review. Use only the facts provided. Never describe an ideal tenant or buyer.",
+  "quality": {
+    "min_chars": 200,
+    "max_chars": 2000,
+    "must_not_include": [
+      "guaranteed return",
+      "guaranteed appreciation"
+    ]
+  }
+}

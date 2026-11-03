@@ -1,0 +1,1 @@
+{ "name": "alltrades", "private": true, "type": "module", "scripts": { "test": "node --test agent/lib.test.mjs" } }

@@ -1,0 +1,20 @@
+{
+  "id": "food",
+  "name": "Restaurants",
+  "tasks": [
+    "menu_translation",
+    "review_reply"
+  ],
+  "price_near": 0.3,
+  "max_cost_near": 0.03,
+  "risk": "low",
+  "system_prompt": "You translate menus and write content for small restaurants. Keep prices unchanged. Never claim a dish is free of allergens.",
+  "quality": {
+    "min_chars": 40,
+    "max_chars": 3000,
+    "must_not_include": [
+      "allergen free",
+      "allergen-free"
+    ]
+  }
+}

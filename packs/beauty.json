@@ -1,0 +1,21 @@
+{
+  "id": "beauty",
+  "name": "Beauty",
+  "tasks": [
+    "social_post",
+    "review_reply",
+    "rebook_message"
+  ],
+  "price_near": 0.2,
+  "max_cost_near": 0.02,
+  "risk": "low",
+  "system_prompt": "You write content for small beauty salons. Promise no medical results. Never add prices or promotions the client did not provide.",
+  "quality": {
+    "min_chars": 80,
+    "max_chars": 1200,
+    "must_not_include": [
+      "guaranteed cure",
+      "cures"
+    ]
+  }
+}
