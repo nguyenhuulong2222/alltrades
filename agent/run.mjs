@@ -1,5 +1,7 @@
 import { teraToGas } from 'near-api-js';
-import { checkQuality, cleanOutput, loadPacks, planReallocation, requestCompletion, sha256, toYocto } from './lib.mjs';
+import { fileURLToPath } from 'node:url';
+import { checkQuality, cleanOutput, loadPacks, requestCompletion, sha256, toYocto } from './lib.mjs';
+import { maybeReallocate } from './realloc.mjs';
 import { agentAccount } from './signer.mjs';
 
 const { CONTRACT_ID, AGENT_ID, NEAR_AI_API_KEY } = process.env;
@@ -45,5 +47,9 @@ if (!quality.ok) throw new Error(`Quality failed: ${quality.reason}`);
 console.log(text);
 await nearCall('submit_delivery', { job_id: jobId, deliverable_hash: sha256(text), cost: toYocto(pack.max_cost_near) });
 
-const plan = planReallocation(await nearView('get_industries'));
-if (plan) await nearCall('reallocate', plan);
+// Agent-side throttle (not enforced by the contract): reallocate at most once per 3 newly settled jobs.
+await maybeReallocate({
+  industries: await nearView('get_industries'),
+  statePath: fileURLToPath(new URL('../.agent-state.json', import.meta.url)),
+  send: (plan) => nearCall('reallocate', plan),
+});

@@ -3,3 +3,5 @@ target/
 node_modules/
 *.tar.gz
 .playwright-mcp/
+.agent-state.json
+.agent-state.json.tmp
