@@ -25,7 +25,7 @@ An AI agent that does paid small-business work across several industries — sal
 No keys or accounts needed for these.
 
 **1. Open the ledger.** Go to https://alltrades-ledger.pages.dev/.
-You see 4 industries (beauty, real estate, food, fitness) with budget, revenue, estimated cost, profit/loss and paid/refunded counts. The page reads `get_industries` from the public testnet RPC on every load. It has no wallet and no login.
+You see each industry on the contract, with its budget, revenue, estimated cost, profit/loss and paid/refunded job counts. The page reads `get_industries` from the public testnet RPC on every load. It has no wallet and no login.
 
 **2. Check that the agent has no full-access key.**
 ```bash
@@ -127,7 +127,7 @@ Before sending anything, the agent derives the public key from `AGENT_FC_PRIVATE
 
 ## AI-assisted development
 
-Much of this repository was written with AI coding assistants, mainly Claude Code (Anthropic), under the author's direction and review. That includes the agent scripts, tests, dashboard, and parts of the contract and this README. The author made the design decisions and approved every on-chain action before the assistant ran it on testnet. Generated deliverables in the demo come from NEAR AI Cloud at run time.
+The contract, agent, tests, dashboard, industry packs and this README were written mainly by Claude (Anthropic), through claude.ai and Claude Code, under the author's direction. The author chose the product direction, made the final decisions, ran the deployment steps that required his accounts and keys, and authorized the testnet runs. Generated deliverables in the demo come from NEAR AI Cloud at run time.
 
 ## License
 
