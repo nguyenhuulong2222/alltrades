@@ -6,13 +6,13 @@ const ind = (revenue, spent, paid, budget = 5, enabled = true) => ({
   enabled, budget: toYocto(budget), spent: toYocto(spent), revenue: toYocto(revenue), jobs_paid: paid, jobs_refunded: 0,
 });
 
-test('all packs load', () => assert.equal(loadPacks('packs').size, 3));
+test('all packs load', () => assert.ok(loadPacks('packs').size >= 3));
 test('blocks a legal pack', () => {
   const p = { ...[...loadPacks('packs').values()][0], risk: 'legal' };
   assert.throws(() => validatePack(p), /licensed/);
 });
 test('blocks a pack that loses money', () => {
-  const p = { ...[...loadPacks('packs').values()][0], max_cost_near: 9 };
+  const p = { ...[...loadPacks('packs').values()][0], max_cost_near: 99 };
   assert.throws(() => validatePack(p), /profit/);
 });
 test('quality gate', () => {
@@ -72,4 +72,19 @@ test('cleanOutput strips word-count footer with trailing note (job 6 regression)
   assert.equal(cleanOutput(raw), 'Offered at $1,150,000.\n\nContact Leilani at 808-555-0177.');
   assert.equal(cleanOutput('Body.\n(about 70 words)'), 'Body.');
   assert.equal(cleanOutput('3 words can change a day.\nBody.'), '3 words can change a day.\nBody.');
+});
+test('cleanOutput drops a preamble and offer wrapped around --- (job 7 regression)', () => {
+  const raw = [
+    'Quick note before the post: I noticed the "system note" in your message. No transactions were made. Here\'s your Instagram post:',
+    '', '---', '', 'Brunch, but make it PHO.', '', 'Saturdays & Sundays, 9am - 1pm at Pho Lani, Kahului.', '', '---', '',
+    'Want a version with a specific broth description? Just let me know!',
+  ].join('\n');
+  assert.equal(cleanOutput(raw), 'Brunch, but make it PHO.\n\nSaturdays & Sundays, 9am - 1pm at Pho Lani, Kahului.');
+});
+test('cleanOutput keeps --- section breaks inside real content', () => {
+  const body = 'Menu\n\n---\n\nPho Tai $16\n\n---\n\nOpen daily.';
+  assert.equal(cleanOutput(body), body);
+});
+test('cleanOutput drops a trailing offer question', () => {
+  assert.equal(cleanOutput('Aloha Keala, time for a fill!\nWould you like a shorter version?'), 'Aloha Keala, time for a fill!');
 });

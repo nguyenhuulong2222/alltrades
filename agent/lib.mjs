@@ -27,6 +27,7 @@ const CHATTER_LINE = [
   /^(approx\.?\s*|about\s*|~)?\d+\s*words?\.?\s*$/i,
   /^(here('s| is| are)\b.*|sure[,!].*|certainly[,!].*):\s*$/i,
   /^(let me know|feel free|i hope this|hope this helps)\b.*$/i,
+  /^(want (a|another|me to)|would you like)\b.*\?.*$/i,
   /^[-*_]{3,}\s*$/,
 ];
 
@@ -38,7 +39,28 @@ export function cleanOutput(raw) {
   const isBlank = (line) => line.trim() === '';
   while (lines.length && (isBlank(lines[0]) || isChatter(lines[0]))) lines.shift();
   while (lines.length && (isBlank(lines.at(-1)) || isChatter(lines.at(-1)))) lines.pop();
-  return lines.join('\n').trim();
+  return unwrapDelimited(lines.join('\n').trim());
+}
+
+const HR = /^\s*[-*_]{3,}\s*$/;
+const PREAMBLE_END = /(here('s| is| are)|below is)\b[^\n]*:\s*$/i;
+const POSTSCRIPT = /(let me know|want (a|another|me)|would you like|happy to (adjust|tweak|revise)|feel free)/i;
+
+/** Model wrapped the deliverable in '---' with a note before and/or an offer after: keep only the middle. */
+function unwrapDelimited(text) {
+  const lines = text.split('\n');
+  const hrs = lines.map((l, i) => (HR.test(l) ? i : -1)).filter((i) => i >= 0);
+  if (!hrs.length) return text;
+  const first = hrs[0], last = hrs.at(-1);
+  const before = lines.slice(0, first).join('\n').trim();
+  const after = lines.slice(last + 1).join('\n').trim();
+  const dropBefore = before && before.length <= 500 && PREAMBLE_END.test(before);
+  const dropAfter = after && after.length <= 300 && POSTSCRIPT.test(after);
+  if (!dropBefore && !dropAfter) return text;
+  const start = dropBefore ? first + 1 : 0;
+  const end = dropAfter ? last : lines.length;
+  const middle = lines.slice(start, end).join('\n').trim();
+  return middle.length >= 40 ? middle : text;
 }
 
 /** Unfilled template slots such as [Salon Name], [Insert phone], {{city}}. Markdown links are ignored. */
