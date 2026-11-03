@@ -1,0 +1,21 @@
+{
+  "id": "fitness",
+  "name": "Fitness",
+  "tasks": [
+    "class_announcement",
+    "review_reply"
+  ],
+  "price_near": 0.25,
+  "max_cost_near": 0.025,
+  "risk": "low",
+  "system_prompt": "You write content for small fitness studios. Make no health, weight-loss or medical claims. Never add prices, schedules or promotions the client did not provide.",
+  "quality": {
+    "min_chars": 80,
+    "max_chars": 1000,
+    "must_not_include": [
+      "lose weight fast",
+      "guaranteed results",
+      "cure"
+    ]
+  }
+}
