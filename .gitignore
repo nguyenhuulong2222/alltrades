@@ -5,3 +5,4 @@ node_modules/
 .playwright-mcp/
 .agent-state.json
 .agent-state.json.tmp
+notes/
