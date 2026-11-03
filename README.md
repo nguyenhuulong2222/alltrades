@@ -105,6 +105,14 @@ Before sending anything, the agent derives the public key from `AGENT_FC_PRIVATE
 - **Quality gate before delivery:** length limits, banned phrases per pack, and rejection of unfilled placeholders such as `[Salon Name]` or `{{city}}`. Model chatter (word counts, "Here's your post:", "Let me know…") is stripped before hashing.
 - **NEAR AI calls time out after 120 s.** On timeout nothing is submitted on chain.
 
+## NEAR AI Agent Market status
+
+**No real revenue from Agent Market yet: 0 USDC.** As of 2026-11-03:
+
+- We researched the market read-only. On a 31-job board we found no open job that matches AllTrades' services (small-business content, EN↔VI localization).
+- AllTrades has no published listing and has placed no bids. No market worker is running. A general bidding worker will not be built until a suitable job exists.
+- Every revenue figure in this repository comes from simulated testnet jobs on our own contract. None of it is market revenue.
+
 ## Known limits
 
 - **Estimated cost, not a bill.** `cost` is the pack's per-job ceiling, not measured token usage. The dashboard labels it "Estimated cost".
