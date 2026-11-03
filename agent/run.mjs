@@ -1,15 +1,20 @@
-import { execFileSync } from 'node:child_process';
+import { teraToGas } from 'near-api-js';
 import { checkQuality, loadPacks, planReallocation, sha256, toYocto } from './lib.mjs';
+import { agentAccount } from './signer.mjs';
 
 const { CONTRACT_ID, AGENT_ID, NEAR_AI_API_KEY } = process.env;
 const MODEL = process.env.MODEL ?? 'zai-org/GLM-5.1-FP8';
 
-function nearCall(method, args) {
-  execFileSync('near', ['call', CONTRACT_ID, method, JSON.stringify(args), '--useAccount', AGENT_ID], { stdio: 'inherit' });
+if (!CONTRACT_ID) throw new Error('CONTRACT_ID is not set');
+const { account, provider, publicKey } = agentAccount();
+
+async function nearCall(method, args) {
+  const outcome = await account.callFunctionRaw({ contractId: CONTRACT_ID, methodName: method, args, gas: teraToGas('30') });
+  console.log(`${method} tx ${outcome.transaction.hash} signed by ${outcome.transaction.public_key}`);
+  return outcome;
 }
 function nearView(method, args = {}) {
-  const out = execFileSync('near', ['view', CONTRACT_ID, method, JSON.stringify(args)], { encoding: 'utf8' });
-  return JSON.parse(out.slice(out.search(/[\[{]/)));
+  return provider.callFunction({ contractId: CONTRACT_ID, method, args });
 }
 async function generate(pack, request) {
   const res = await fetch('https://cloud-api.near.ai/v1/chat/completions', {
@@ -28,8 +33,9 @@ async function generate(pack, request) {
 }
 
 const [jobId, request] = [Number(process.argv[2]), process.argv[3]];
+console.log(`Agent signer: ${publicKey}`);
 const packs = loadPacks('packs');
-const job = nearView('get_job', { job_id: jobId });
+const job = await nearView('get_job', { job_id: jobId });
 const pack = packs.get(job.industry);
 if (!pack) throw new Error(`No pack for ${job.industry}`);
 
@@ -38,7 +44,7 @@ const quality = checkQuality(text, pack);
 if (!quality.ok) throw new Error(`Quality failed: ${quality.reason}`);
 
 console.log(text);
-nearCall('submit_delivery', { job_id: jobId, deliverable_hash: sha256(text), cost: toYocto(pack.max_cost_near) });
+await nearCall('submit_delivery', { job_id: jobId, deliverable_hash: sha256(text), cost: toYocto(pack.max_cost_near) });
 
-const plan = planReallocation(nearView('get_industries'));
-if (plan) nearCall('reallocate', plan);
+const plan = planReallocation(await nearView('get_industries'));
+if (plan) await nearCall('reallocate', plan);
