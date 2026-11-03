@@ -1,9 +1,10 @@
 import { teraToGas } from 'near-api-js';
-import { checkQuality, loadPacks, planReallocation, sha256, toYocto } from './lib.mjs';
+import { checkQuality, cleanOutput, loadPacks, planReallocation, requestCompletion, sha256, toYocto } from './lib.mjs';
 import { agentAccount } from './signer.mjs';
 
 const { CONTRACT_ID, AGENT_ID, NEAR_AI_API_KEY } = process.env;
 const MODEL = process.env.MODEL ?? 'zai-org/GLM-5.1-FP8';
+const AI_TIMEOUT_MS = 120_000;
 
 if (!CONTRACT_ID) throw new Error('CONTRACT_ID is not set');
 const { account, provider, publicKey } = agentAccount();
@@ -16,8 +17,8 @@ async function nearCall(method, args) {
 function nearView(method, args = {}) {
   return provider.callFunction({ contractId: CONTRACT_ID, method, args });
 }
-async function generate(pack, request) {
-  const res = await fetch('https://cloud-api.near.ai/v1/chat/completions', {
+function generate(pack, request) {
+  return requestCompletion('https://cloud-api.near.ai/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${NEAR_AI_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -27,9 +28,7 @@ async function generate(pack, request) {
         { role: 'user', content: request },
       ],
     }),
-  });
-  if (!res.ok) throw new Error(`NEAR AI ${res.status}`);
-  return (await res.json()).choices[0].message.content;
+  }, AI_TIMEOUT_MS);
 }
 
 const [jobId, request] = [Number(process.argv[2]), process.argv[3]];
@@ -39,7 +38,7 @@ const job = await nearView('get_job', { job_id: jobId });
 const pack = packs.get(job.industry);
 if (!pack) throw new Error(`No pack for ${job.industry}`);
 
-const text = await generate(pack, request);
+const text = cleanOutput(await generate(pack, request)); // hash, quality check and delivery all use this exact text
 const quality = checkQuality(text, pack);
 if (!quality.ok) throw new Error(`Quality failed: ${quality.reason}`);
 

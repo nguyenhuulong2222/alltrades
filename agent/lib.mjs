@@ -21,9 +21,37 @@ export function loadPacks(dir) {
   return packs;
 }
 
+const CHATTER_LINE = [
+  /^\(?\s*(approx\.?\s*)?(word|character|char)\s*count\s*[:\-–—]?.*\d.*\)?\s*$/i,
+  /^\(?\s*~?\d+\s*words?\s*\)?\.?\s*$/i,
+  /^(here('s| is| are)\b.*|sure[,!].*|certainly[,!].*):\s*$/i,
+  /^(let me know|feel free|i hope this|hope this helps)\b.*$/i,
+  /^[-*_]{3,}\s*$/,
+];
+
+/** Removes model chatter so the hash covers exactly what the client receives. */
+export function cleanOutput(raw) {
+  let text = String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/\r\n/g, '\n').trim();
+  const lines = text.split('\n');
+  const isChatter = (line) => line.trim() !== '' && CHATTER_LINE.some((re) => re.test(line.trim().replace(/^[*_]+|[*_]+$/g, '')));
+  const isBlank = (line) => line.trim() === '';
+  while (lines.length && (isBlank(lines[0]) || isChatter(lines[0]))) lines.shift();
+  while (lines.length && (isBlank(lines.at(-1)) || isChatter(lines.at(-1)))) lines.pop();
+  return lines.join('\n').trim();
+}
+
+/** Unfilled template slots such as [Salon Name], [Insert phone], {{city}}. Markdown links are ignored. */
+export function findPlaceholders(text) {
+  const square = [...text.matchAll(/\[([A-Z][^\]\n]{0,48})\](?!\()/g)].map((m) => m[0]);
+  const curly = [...text.matchAll(/\{\{[^}\n]{1,48}\}\}/g)].map((m) => m[0]);
+  return [...square, ...curly];
+}
+
 export function checkQuality(text, pack) {
   const { min_chars, max_chars, must_not_include } = pack.quality;
   const lower = text.toLowerCase();
+  const placeholders = findPlaceholders(text);
+  if (placeholders.length) return { ok: false, reason: `placeholder:${placeholders[0]}` };
   if (text.length < min_chars) return { ok: false, reason: 'too_short' };
   if (text.length > max_chars) return { ok: false, reason: 'too_long' };
   const hit = must_not_include.find((w) => lower.includes(w.toLowerCase()));
@@ -53,4 +81,21 @@ export function planReallocation(industries, minJobs = 3) {
   const free = near(worst.i.budget) - near(worst.i.spent);
   const amount = Math.floor(free * 0.2 * 1000) / 1000;
   return amount > 0 ? { from: worst.name, to: best.name, amount: toYocto(amount) } : null;
+}
+
+/** OpenAI-style chat call with a hard timeout covering headers and body. Returns message content. */
+export async function requestCompletion(url, init, timeoutMs, fetchImpl = fetch) {
+  const label = 'NEAR AI';
+  try {
+    const res = await fetchImpl(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok) throw new Error(`${label} HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const content = (await res.json())?.choices?.[0]?.message?.content;
+    if (typeof content !== 'string') throw new Error(`${label} returned no message content`);
+    return content;
+  } catch (e) {
+    if (e.name === 'TimeoutError' || e.name === 'AbortError') {
+      throw new Error(`${label} timed out after ${timeoutMs / 1000}s; nothing was submitted on chain`);
+    }
+    throw e.message?.startsWith(label) ? e : new Error(`${label} request failed: ${e.message}`);
+  }
 }

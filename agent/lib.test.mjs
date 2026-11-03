@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { checkQuality, loadPacks, near, planReallocation, sha256, toYocto, validatePack } from './lib.mjs';
+import { checkQuality, cleanOutput, findPlaceholders, loadPacks, near, planReallocation, requestCompletion, sha256, toYocto, validatePack } from './lib.mjs';
 
 const ind = (revenue, spent, paid, budget = 5, enabled = true) => ({
   enabled, budget: toYocto(budget), spent: toYocto(spent), revenue: toYocto(revenue), jobs_paid: paid, jobs_refunded: 0,
@@ -34,4 +34,36 @@ test('waits for enough jobs', () => {
 });
 test('no move when nobody loses', () => {
   assert.equal(planReallocation([['beauty', ind(2, 0.2, 5)], ['food', ind(1, 0.2, 5)]]), null);
+});
+
+test('cleanOutput strips word-count footer, think block and preamble', () => {
+  const raw = '<think>plan</think>\nHere is your post:\n\nGlow up at Lani Nails this fall.\n\n---\n*Word count: 42*\n';
+  assert.equal(cleanOutput(raw), 'Glow up at Lani Nails this fall.');
+  assert.equal(cleanOutput('Line one.\n(120 words)'), 'Line one.');
+  assert.equal(cleanOutput('Body stays.\n\nLet me know if you want changes!'), 'Body stays.');
+});
+test('cleanOutput keeps normal content intact', () => {
+  const body = 'Book now.\n\nOpen 9am to 5pm, 3 chairs.';
+  assert.equal(cleanOutput(`  ${body}  `), body);
+});
+test('hash is over the cleaned text', () => {
+  assert.equal(sha256(cleanOutput('Hi there, welcome in.\nWord count: 4')), sha256('Hi there, welcome in.'));
+});
+test('finds placeholders but not markdown links', () => {
+  assert.deepEqual(findPlaceholders('Visit [Salon Name] at {{address}}'), ['[Salon Name]', '{{address}}']);
+  assert.deepEqual(findPlaceholders('See [our site](https://x.y) and [x] done'), []);
+});
+test('quality gate rejects unfilled placeholders', () => {
+  const p = loadPacks('packs').get('food');
+  assert.equal(checkQuality('x'.repeat(50) + ' call [Phone Number]', p).reason, 'placeholder:[Phone Number]');
+});
+test('requestCompletion times out with a clear error', async () => {
+  const hang = (url, { signal }) => new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason)));
+  await assert.rejects(requestCompletion('u', {}, 20, hang), /NEAR AI timed out after 0.02s; nothing was submitted/);
+});
+test('requestCompletion returns content and reports HTTP errors', async () => {
+  const ok = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: 'hi' } }] }) });
+  assert.equal(await requestCompletion('u', {}, 1000, ok), 'hi');
+  const bad = async () => ({ ok: false, status: 401, text: async () => 'unauthorized' });
+  await assert.rejects(requestCompletion('u', {}, 1000, bad), /NEAR AI HTTP 401: unauthorized/);
 });
