@@ -67,3 +67,9 @@ test('requestCompletion returns content and reports HTTP errors', async () => {
   const bad = async () => ({ ok: false, status: 401, text: async () => 'unauthorized' });
   await assert.rejects(requestCompletion('u', {}, 1000, bad), /NEAR AI HTTP 401: unauthorized/);
 });
+test('cleanOutput strips word-count footer with trailing note (job 6 regression)', () => {
+  const raw = 'Offered at $1,150,000.\n\nContact Leilani at 808-555-0177.\n\n*(68 words — ready for agent review)*';
+  assert.equal(cleanOutput(raw), 'Offered at $1,150,000.\n\nContact Leilani at 808-555-0177.');
+  assert.equal(cleanOutput('Body.\n(about 70 words)'), 'Body.');
+  assert.equal(cleanOutput('3 words can change a day.\nBody.'), '3 words can change a day.\nBody.');
+});

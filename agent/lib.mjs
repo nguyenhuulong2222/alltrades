@@ -23,7 +23,8 @@ export function loadPacks(dir) {
 
 const CHATTER_LINE = [
   /^\(?\s*(approx\.?\s*)?(word|character|char)\s*count\s*[:\-–—]?.*\d.*\)?\s*$/i,
-  /^\(?\s*~?\d+\s*words?\s*\)?\.?\s*$/i,
+  /^\(\s*(approx\.?\s*|about\s*|~)?\d+\s*words?\b[^)]*\)\.?\s*$/i,
+  /^(approx\.?\s*|about\s*|~)?\d+\s*words?\.?\s*$/i,
   /^(here('s| is| are)\b.*|sure[,!].*|certainly[,!].*):\s*$/i,
   /^(let me know|feel free|i hope this|hope this helps)\b.*$/i,
   /^[-*_]{3,}\s*$/,
