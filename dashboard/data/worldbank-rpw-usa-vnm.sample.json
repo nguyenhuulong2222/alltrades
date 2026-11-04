@@ -1,0 +1,11 @@
+{
+  "sample": true,
+  "notice": "MẪU / SAMPLE: các con số dưới đây là giá trị minh họa, KHÔNG phải số liệu World Bank thật. Chưa xác nhận được điều khoản dataset Remittance Prices Worldwide (trang điều khoản trả 403), nên repo chỉ giữ dữ liệu mẫu.",
+  "source_name": "World Bank, Remittance Prices Worldwide (định dạng tham chiếu)",
+  "source_url": "https://remittanceprices.worldbank.org",
+  "license_note": "Data catalog ghi CC BY 4.0; điều khoản riêng của trang RPW chưa đọc được.",
+  "corridor": "United States → Viet Nam",
+  "send_amount_usd": 200,
+  "period": "2025Q3 (mẫu)",
+  "average_total_cost_pct": 5.0
+}
