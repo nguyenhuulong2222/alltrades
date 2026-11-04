@@ -266,3 +266,8 @@ test('runRemit refuses injection before fetching anything', async () => {
   assert.equal(out.draft.ok, false);
   assert.equal(out.summary, null);
 });
+test('runRemit drafts for the contract passed with --contract', async () => {
+  const out = await runRemit('Gửi 500 đô về cho mẹ', { offline: true, now: NOW, salt: SALT, contractId: 'my-contract.testnet' });
+  assert.equal(out.draft.call.contract, 'my-contract.testnet');
+  assert.match(out.draft.sign_command, /as-transaction my-contract\.testnet create_order/);
+});
