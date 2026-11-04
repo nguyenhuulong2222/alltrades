@@ -36,6 +36,17 @@ Every job so far was paid by our own test client, and an operator starts each ag
 
 Remit follows the same pattern: the agent only drafts, a person signs `create_order`, and the payout script is started by hand for each order.
 
+**Jobs v2 autopilot: written and unit-tested, NOT deployed.** On branch `feature/autopilot` there is a contract extension and a background worker meant to make every step above automatic except payment by a real customer (see [Jobs v2 autopilot](#jobs-v2-autopilot-not-deployed)). None of it has run on testnet yet. Until it does, the table above is the state of the live system.
+
+| Step | In code and unit tests (not on chain yet) |
+|---|---|
+| Find work | The worker reads `get_open_jobs_v2` in a loop. |
+| Bid | Out of scope. There is no bidding, and NEAR AI Agent Market is out of scope before 2026-11-14. |
+| Do the work | Only for jobs whose `brief_id` and `brief_hash` match a fictional brief in `briefs/`. |
+| Deliver | `submit_delivery_v2`. The contract checks the text against its hash, accepts at most 4096 bytes, and allows at most 10 deliveries per day. |
+| Get paid | After the review window, anyone can call `finalize_job_v2`, and the worker does. Clients are still our own test account. |
+| Keep the books | Same industries and `total_revenue` as v1. |
+
 ## Do X, see Y
 
 No keys or accounts needed for these.
@@ -71,8 +82,8 @@ NEAR RPC rejected the transfer during transaction validation, so it never reache
 
 **5. Run the tests.**
 ```bash
-npm install && npm test            # 90 tests: packs, quality gate, key check, reallocate throttle, Remit agent, payout script, dashboard data
-cd contract && cargo test          # 82 tests: jobs (16) and Remit orders (66)
+npm install && npm test            # 112 tests: packs, quality gate, key check, reallocate throttle, Remit agent, payout script, dashboard data, v2 worker
+cd contract && cargo test          # 154 tests: jobs v1 (16), Remit orders (66), Jobs v2 autopilot (72)
 ```
 
 **6. Add an industry.** Drop a JSON file into `packs/` (copy `packs/fitness.json`), then have the owner call `add_industry`. The agent picks it up on the next job. A pack with `risk` set to medical, legal, financial or tax is refused, as is one whose cost ceiling is at or above its price.
@@ -153,6 +164,26 @@ Before sending anything, the agent derives the public key from `AGENT_FC_PRIVATE
 - **Risky industries are blocked.** Packs marked medical, legal, financial or tax are refused because they need a licensed human.
 - **Quality gate before delivery:** length limits, banned phrases per pack, and rejection of unfilled placeholders such as `[Salon Name]` or `{{city}}`. Model chatter (word counts, "Here's your post:", "Let me know…") is stripped before hashing.
 - **NEAR AI calls time out after 120 s.** On timeout nothing is submitted on chain.
+
+## Jobs v2 autopilot (not deployed)
+
+> **Status: code and unit tests only, on branch `feature/autopilot`. Not deployed to testnet, and no worker has run against a real chain.** This section describes the design. It is not evidence that the design works on chain.
+
+The goal is that people only set limits. The owner configures the worker account, the review window, a minimum job price, a daily delivery limit (at most 10), and a pause switch. After that:
+
+1. A client pays into escrow with `create_job_v2(industry, brief_id, brief_hash)`. A brief is never free text: it must be one of the **fictional** briefs in [`briefs/`](briefs/), identified by its id and the SHA-256 of its text. The catalog loader refuses briefs not marked fictional and anything that looks like a phone number, email address or long number.
+2. The worker (`agent/worker.mjs --loop`) finds Open v2 jobs and checks the brief hash against the catalog. It writes the deliverable with NEAR AI, runs the quality gate, and calls `submit_delivery_v2`. The deliverable text travels in the transaction arguments, so it is public. The contract checks it against the hash and accepts at most 4096 bytes. Only the hash is stored.
+3. The client has a review window, 300 s to 7 days and set by the owner, to `dispute_job_v2`. After the window, anyone can call `finalize_job_v2`; the escrow becomes revenue exactly once. **A client cannot take the work and refund after the window.** Cancelling is only possible before delivery.
+4. **Disputes are decided by the owner** (`resolve_dispute_v2`). **That is acceptable for a demo only.** A real service would need an independent arbiter. A refund ruling goes through the same callback pattern as Remit: the job becomes Refunded only if the transfer succeeds.
+
+Limits and stop paths:
+- **On chain:** per-job cost cap, per-industry budget, at most 10 deliveries per day, the 4096-byte limit, and `set_autopilot_paused` to stop new jobs, deliveries and finalization. `set_worker` locks out a compromised worker key.
+- **In the worker:** jobs per pass, attempts per job, a daily AI cost budget, a single-instance lock, and the file `agent/STOP`, checked before every action.
+- **Restart safety:** state is written before each model call, and finalization is driven by what the chain shows, so a lost state file cannot strand a payment.
+
+Storage: v2 lives under its own keys (`ap:*`), like Remit. The `Contract` struct is unchanged, so a deploy needs no migration, and v1 jobs keep their old rules.
+
+Tests: `cargo test` has 72 autopilot tests. They cover config, create, deliver, the daily limit, finalize-once, disputes, the closed window, cancel, owner rulings, callbacks, escrow vs. revenue, and v1/Remit isolation. `npm test` has 22 worker tests against an in-memory contract with no network: catalog, skipping, limits, STOP, pause, finalize, restart recovery, and the lock.
 
 ## Remit (simulated USD → VND transfers)
 
