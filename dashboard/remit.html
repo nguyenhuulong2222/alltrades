@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AllTrades Remit</title>
+<link rel="icon" href="data:,">
+<meta name="description" content="Read-only view of simulated Remit orders on NEAR testnet. Not a money transfer service.">
+<style>
+  :root {
+    --bg: #f6f5f1; --surface: #ffffff; --text: #1d1d1b; --muted: #6b6a64; --line: #e3e1da;
+    --pos: #1f7a4d; --neg: #b3261e; --accent: #2b5fd9; --bar-bg: #ecebe5;
+    --warn-bg: #fff4d6; --warn-text: #6b4e00; --sample-bg: #f1e9ff; --sample-text: #5a2d9c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141413; --surface: #1e1e1c; --text: #ecebe6; --muted: #a09f98; --line: #33332f;
+      --pos: #5cc28d; --neg: #f08a80; --accent: #8fb0ff; --bar-bg: #2b2b28;
+      --warn-bg: #3a3120; --warn-text: #f2d48a; --sample-bg: #2e2440; --sample-text: #d3b8ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+  h1 { font-size: 1.5rem; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 1.15rem; margin: 28px 0 8px; }
+  nav a { margin-right: 12px; font-size: 0.9rem; }
+  .sub { color: var(--muted); font-size: 0.9rem; margin: 4px 0 0; }
+  .banner { margin: 16px 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-bg); color: var(--warn-text);
+    font-weight: 600; font-size: 0.95rem; }
+  .banner span { display: inline-block; margin-right: 10px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+  .card h3 { font-size: 1rem; margin: 0; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 8px; }
+  .card h3 > :first-child { white-space: nowrap; }
+  .pill { font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .pill.Settled { color: var(--pos); border-color: var(--pos); }
+  .pill.Refunded { color: var(--accent); border-color: var(--accent); }
+  .pill.Open, .pill.Settling, .pill.Refunding { color: var(--warn-text); border-color: var(--warn-text); }
+  .pill.refused { color: var(--neg); border-color: var(--neg); }
+  .pill.sample { background: var(--sample-bg); color: var(--sample-text); border-color: transparent; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 10px 0 0; font-size: 0.92rem; }
+  dt { color: var(--muted); } dd { margin: 0; text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+  .links { margin-top: 10px; font-size: 0.88rem; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .note { color: var(--muted); font-size: 0.85rem; margin: 6px 0 0; }
+  .estimate { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .estimate ul { margin: 8px 0 0; padding-left: 18px; }
+  .estimate li { margin: 6px 0; }
+  .src { color: var(--muted); font-size: 0.85rem; display: block; }
+  .state { background: var(--surface); border: 1px dashed var(--line); border-radius: 10px; padding: 18px; text-align: center; color: var(--muted); }
+  .state.error { border-style: solid; border-color: var(--neg); color: var(--text); }
+  .audit .msg { font-size: 0.9rem; margin: 8px 0 0; overflow-wrap: anywhere; }
+  .audit .msg.redacted { color: var(--muted); font-style: italic; }
+  .audit ul { margin: 6px 0 0; padding-left: 18px; font-size: 0.88rem; }
+  button { font: inherit; font-size: 0.9rem; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--surface); color: var(--text); cursor: pointer; }
+  button:disabled { opacity: 0.6; cursor: default; }
+  a { color: var(--accent); }
+  code { font-size: 0.85em; overflow-wrap: anywhere; }
+  footer { margin-top: 32px; color: var(--muted); font-size: 0.85rem; }
+  footer p { margin: 4px 0; }
+  @media (max-width: 640px) { h1 { font-size: 1.3rem; } .cards { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <nav><a href="./">Ledger</a><a href="./remit.html" aria-current="page">Remit</a></nav>
+  <header>
+    <div>
+      <h1>AllTrades Remit</h1>
+      <p class="sub">Contract <code id="contract"></code> · chỉ đọc qua RPC công khai · không đăng nhập, không ví</p>
+    </div>
+    <button id="refresh" type="button">Tải lại</button>
+  </header>
+
+  <div class="banner" role="note">
+    <span>Simulated — testnet.</span>
+    <span>Không phải dịch vụ chuyển tiền.</span>
+    <span>Không có tiền thật, không có VND thật.</span>
+  </div>
+
+  <h2>Lệnh TransferOrder trên testnet</h2>
+  <p class="note" id="config"></p>
+  <section id="orders" aria-live="polite"></section>
+
+  <h2>Chi phí tham khảo cho 500 USD → VND</h2>
+  <section class="estimate" id="estimate" aria-live="polite"></section>
+
+  <h2>Bằng chứng chặn prompt injection</h2>
+  <p class="note">Tin nhắn mẫu tổng hợp chạy qua bộ lọc của agent (luật cố định, không dùng model). Tin nhắn có thông tin cá nhân không được lưu.</p>
+  <section class="audit" id="audit" aria-live="polite"></section>
+
+  <footer>
+    <p>Người nhận chỉ là người nhận mẫu; chain chỉ lưu <code>recipient_hash</code>, không lưu tên, số tài khoản hay số điện thoại.</p>
+    <p>Agent chỉ tạo bản nháp. Người gửi tự ký <code>create_order</code>; tài khoản payout mô phỏng ký <code>settle_order</code> sau khi đơn vị chi trả mô phỏng báo đã giao.</p>
+    <p id="updated"></p>
+  </footer>
+</main>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const CONTRACT = 'alltrades-long2222.testnet';
+  const RPC = params.get('rpc') || 'https://rpc.testnet.near.org';
+  const EXPLORER = 'https://testnet.nearblocks.io/txns/';
+  const ESTIMATE_LABEL = 'ước tính, không phải báo giá trực tiếp';
+  const ER_API = 'https://open.er-api.com/v6/latest/USD';
+  const ONECLICK = 'https://1click.chaindefuser.com/v0/quote';
+  const USDC = 'nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1';
+  const USDT = 'nep141:usdt.tether-token.near';
+  const AMOUNT_USD = 500;
+  const MAX_ORDERS = 50; // no pagination yet
+  const TIMEOUT_MS = 15000;
+
+  const $ = (id) => document.getElementById(id);
+  $('contract').textContent = CONTRACT;
+  const el = (tag, attrs = {}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) k === 'class' ? (n.className = v) : n.setAttribute(k, v);
+    for (const kid of kids) if (kid !== null && kid !== undefined) n.append(kid);
+    return n;
+  };
+  const near = (yocto) => {
+    const y = BigInt(yocto), Y = 10n ** 24n;
+    const frac = (y % Y).toString().padStart(24, '0').slice(0, 4).replace(/0+$/, '');
+    return `${y / Y}${frac ? '.' + frac : ''} Ⓝ`;
+  };
+  const num = (n, d = 0) => Number(n).toLocaleString('vi-VN', { maximumFractionDigits: d });
+  const short = (h) => `${h.slice(0, 8)}…`;
+
+  async function view(method, args = {}) {
+    const res = await fetch(RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS),
+      body: JSON.stringify({ jsonrpc: '2.0', id: 'remit', method: 'query', params: { request_type: 'call_function', finality: 'final',
+        account_id: CONTRACT, method_name: method, args_base64: btoa(JSON.stringify(args)) } }) });
+    if (!res.ok) throw new Error(`RPC HTTP ${res.status}`);
+    const j = await res.json();
+    if (j.error || j.result?.error) throw new Error(`RPC lỗi khi gọi ${method}`);
+    return JSON.parse(new TextDecoder().decode(new Uint8Array(j.result.result)) || 'null');
+  }
+  const getJson = async (path) => { const r = await fetch(path, { cache: 'no-store' }); if (!r.ok) throw new Error(path); return r.json(); };
+
+  const STATUS_VI = { Open: 'Đang mở', Settling: 'Đang chuyển (chờ callback)', Refunding: 'Đang hoàn (chờ callback)', Settled: 'Đã settle', Refunded: 'Đã hoàn' };
+  const TX_LABEL = { create: 'create_order', settle: 'settle_order', refund: 'refund_order', settle_rejected_low_gas: 'settle bị từ chối (19.999 Tgas)' };
+
+  async function loadOrders() {
+    $('orders').replaceChildren(el('p', { class: 'sub', role: 'status' }, 'Đang đọc lệnh từ NEAR testnet…'));
+    const [config, txs] = await Promise.all([view('get_remit_config'), getJson('data/remit-txs.json').catch(() => ({ orders: {} }))]);
+    if (!config) { $('orders').replaceChildren(el('div', { class: 'state' }, 'Remit chưa được cấu hình trên contract.')); return; }
+    $('config').textContent = `Payout mô phỏng: ${config.payout} · trần mỗi lệnh ${near(config.max_order_amount)} · ${config.next_order_id} lệnh`;
+    const n = Math.min(Number(config.next_order_id), MAX_ORDERS);
+    const orders = await Promise.all(Array.from({ length: n }, (_, i) => view('get_order', { order_id: i })));
+    if (!orders.length) { $('orders').replaceChildren(el('div', { class: 'state' }, 'Chưa có lệnh nào.')); return; }
+    const cards = orders.filter(Boolean).reverse().map((o) => {
+      const t = txs.orders?.[o.id] ?? {};
+      const links = Object.entries(t).map(([k, h]) => el('a', { href: EXPLORER + h, target: '_blank', rel: 'noopener' }, `${TX_LABEL[k] ?? k} ${short(h)}`));
+      return el('article', { class: 'card' },
+        el('h3', {}, el('span', {}, `Lệnh #${o.id}`), el('span', { class: `pill ${o.status}` }, STATUS_VI[o.status] ?? o.status)),
+        el('dl', {},
+          el('dt', {}, 'Số tiền'), el('dd', {}, near(o.amount)),
+          el('dt', {}, 'Người gửi'), el('dd', {}, o.sender),
+          el('dt', {}, 'Payout'), el('dd', {}, o.payout),
+          el('dt', {}, 'Deadline'), el('dd', {}, new Date(Number(BigInt(o.deadline_ns) / 1000000n)).toLocaleString('vi-VN')),
+          el('dt', {}, 'recipient_hash'), el('dd', {}, el('code', {}, `${o.recipient_hash.slice(0, 12)}…`)),
+        ),
+        links.length ? el('div', { class: 'links' }, ...links) : el('p', { class: 'note' }, 'Chưa có link tx cho lệnh này.'),
+      );
+    });
+    $('orders').replaceChildren(el('div', { class: 'cards' }, ...cards));
+  }
+
+  async function loadEstimate() {
+    const box = $('estimate');
+    box.replaceChildren(el('p', { class: 'sub', role: 'status' }, 'Đang tải dữ liệu tham khảo…'));
+    const items = [];
+    const hidden = [];
+
+    // World Bank corridor (sample until dataset terms are confirmed)
+    try {
+      const wb = await getJson('data/worldbank-rpw-usa-vnm.sample.json');
+      const fee = AMOUNT_USD * wb.average_total_cost_pct / 100;
+      items.push(el('li', {},
+        wb.sample ? el('span', { class: 'pill sample' }, 'MẪU') : null, ' ',
+        `Chi phí trung bình hành lang ${wb.corridor}: ${wb.average_total_cost_pct}% (khi gửi ${wb.send_amount_usd} USD). Áp cho ${AMOUNT_USD} USD: khoảng ${num(fee, 2)} USD.`,
+        el('span', { class: 'src' }, `Nguồn: ${wb.source_name}. Kỳ dữ liệu: ${wb.period}.${wb.sample ? ' Giá trị minh họa, không phải số liệu World Bank thật.' : ''}`)));
+    } catch { hidden.push('Không tải được dữ liệu hành lang World Bank (mẫu).'); }
+
+    // Reference rate, fetched now, not stored
+    try {
+      const r = await fetch(ER_API, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+      const j = await r.json();
+      const vnd = j?.rates?.VND;
+      if (j?.result !== 'success' || !(vnd > 0)) throw new Error('no rate');
+      items.push(el('li', {},
+        `Tỷ giá tham khảo giữa thị trường: 1 USD = ${num(vnd)} VND. ${AMOUNT_USD} USD ≈ ${num(AMOUNT_USD * vnd)} VND trước phí.`,
+        el('span', { class: 'src' }, el('a', { href: 'https://www.exchangerate-api.com', target: '_blank', rel: 'noopener' }, 'Rates By Exchange Rate API'),
+          `. Kỳ dữ liệu: cập nhật ${j.time_last_update_utc}.`)));
+    } catch { hidden.push('Trình duyệt không lấy được tỷ giá tham khảo; phần tỷ giá bị ẩn, không tự đoán.'); }
+
+    // 1Click dry quote, fetched now, kept only in this page's memory
+    try {
+      const body = { dry: true, swapType: 'EXACT_INPUT', slippageTolerance: 100, originAsset: USDC, depositType: 'ORIGIN_CHAIN',
+        destinationAsset: USDT, amount: String(AMOUNT_USD * 1e6), refundTo: '0'.repeat(64), refundType: 'ORIGIN_CHAIN',
+        recipient: '0'.repeat(64), recipientType: 'DESTINATION_CHAIN', deadline: new Date(Date.now() + 30 * 60000).toISOString() };
+      const r = await fetch(ONECLICK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        cache: 'no-store', signal: AbortSignal.timeout(TIMEOUT_MS) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const q = (await r.json())?.quote;
+      if (!q || q.depositAddress) throw new Error('bad quote');
+      items.push(el('li', {},
+        `Chặng stablecoin USDC→USDT trên NEAR: vào ${q.amountInFormatted}, ra ${q.amountOutFormatted}, khoảng ${q.timeEstimate} giây.`,
+        el('span', { class: 'src' }, `Nguồn: 1Click dry quote (NEAR Intents), không có địa chỉ nạp. Kỳ dữ liệu: lấy lúc ${new Date().toLocaleTimeString('vi-VN')}, không lưu.`)));
+    } catch { hidden.push('Trình duyệt không gọi được 1Click (dry quote); phần chặng stablecoin bị ẩn.'); }
+
+    box.replaceChildren(
+      el('p', {}, el('strong', {}, `Tất cả là ${ESTIMATE_LABEL}.`), ' Không chọn dịch vụ thay người dùng, không tư vấn đầu tư.'),
+      items.length ? el('ul', {}, ...items) : null,
+      ...hidden.map((h) => el('p', { class: 'note' }, h)),
+    );
+  }
+
+  async function loadAudit() {
+    try {
+      const d = await getJson('data/remit-audit-demo.json');
+      const cards = d.entries.map((e) => el('article', { class: 'card' },
+        el('h3', {}, el('span', {}, e.outcome === 'drafted' ? 'Tạo bản nháp' : e.outcome === 'refused' ? 'Bị từ chối' : 'Thiếu dữ liệu'),
+          el('span', { class: `pill ${e.outcome === 'refused' ? 'refused' : e.outcome === 'drafted' ? 'Settled' : 'Open'}` }, e.codes.join(', ') || 'ok')),
+        el('p', { class: `msg${e.message.startsWith('(') ? ' redacted' : ''}` }, e.message.startsWith('(') ? e.message : `“${e.message}”`),
+        el('ul', {}, ...e.reasons.map((r) => el('li', {}, r)))));
+      $('audit').replaceChildren(el('div', { class: 'cards' }, ...cards));
+    } catch {
+      $('audit').replaceChildren(el('div', { class: 'state' }, 'Không tải được file audit demo.'));
+    }
+  }
+
+  async function load() {
+    $('refresh').disabled = true;
+    try {
+      await Promise.all([
+        loadOrders().catch((e) => $('orders').replaceChildren(el('div', { class: 'state error', role: 'alert' }, `Không đọc được lệnh: ${e.message}. RPC testnet có thể đang bận.`))),
+        loadEstimate(),
+        loadAudit(),
+      ]);
+      $('updated').textContent = `Cập nhật ${new Date().toLocaleString('vi-VN')} (finality: final).`;
+    } finally { $('refresh').disabled = false; }
+  }
+  $('refresh').addEventListener('click', load);
+  load();
+})();
+</script>
+</body>
+</html>

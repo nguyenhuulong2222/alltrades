@@ -1,0 +1,8 @@
+{
+  "notice": "Public testnet transaction hashes for Remit orders, copied from docs/remit-checks.md. Orders without an entry show no link.",
+  "orders": {
+    "0": { "create": "4zJ741GHeUiQEnrc51TnC54FUeewsP9GeQ3zDZFyLqma", "settle": "FAJWHD9LU4vW2dL157iStTxHHCPvUPo7FwSCGPuTfv1n" },
+    "1": { "create": "DCvWSn6RSz62ArErDkfcbHW8qqG5hDJngLr7Wtxuqxid", "refund": "GXsjkt8bmZCD5YSS4RNSaiBrgWuzPx3XmjekPA9By7vZ" },
+    "2": { "create": "6fyVbhxF5pPRb8JDuLWVsryZbcjDaWPJvNGkouC53D1f", "settle_rejected_low_gas": "3aTZQXNs5B3KDJQTCttnqnpFAgMppnuB1Z4xvXR3wraA", "settle": "HqZ7kjWv6GtCxcc2GDVHdt4axcWx3ifob8asTDTGGoqg" }
+  }
+}
