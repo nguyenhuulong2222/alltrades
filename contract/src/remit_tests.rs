@@ -1,6 +1,6 @@
 use super::*;
 use near_sdk::test_utils::VMContextBuilder;
-use near_sdk::testing_env;
+use near_sdk::{testing_env, PromiseResult, RuntimeFeesConfig};
 
 const H: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const H2: &str = "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
@@ -14,12 +14,34 @@ fn acc(s: &str) -> AccountId {
 fn n(x: u128) -> NearToken {
     NearToken::from_millinear(x)
 }
+const CONTRACT: &str = "alltrades.testnet";
+
 fn at(who: &str, deposit: NearToken, ts: u64) {
     testing_env!(VMContextBuilder::new()
+        .current_account_id(acc(CONTRACT))
         .predecessor_account_id(acc(who))
         .attached_deposit(deposit)
         .block_timestamp(ts)
         .build());
+}
+/// Runs `on_order_transfer` as `caller` with the given transfer outcome.
+fn callback(c: &mut Contract, caller: &str, id: u64, ok: bool) -> OrderStatus {
+    let result = if ok { PromiseResult::Successful(vec![]) } else { PromiseResult::Failed };
+    testing_env!(
+        VMContextBuilder::new()
+            .current_account_id(acc(CONTRACT))
+            .predecessor_account_id(acc(caller))
+            .block_timestamp(T0)
+            .build(),
+        near_sdk::test_vm_config(),
+        RuntimeFeesConfig::test(),
+        Default::default(),
+        vec![result],
+    );
+    c.on_order_transfer(id)
+}
+fn status(c: &Contract, id: u64) -> OrderStatus {
+    c.get_order(id).unwrap().status
 }
 fn base() -> Contract {
     at("owner.testnet", n(0), T0);
@@ -54,7 +76,7 @@ fn create_stores_hash_amount_deadline() {
     assert_eq!(o.amount, n(200));
     assert_eq!(o.deadline_ns.0, deadline());
     assert_eq!(o.status, OrderStatus::Open);
-    assert_eq!(order(&mut c, 1), 1);
+    assert_eq!(order(&mut c, 10), 1);
 }
 
 #[test]
@@ -69,6 +91,22 @@ fn create_rejected_before_config() {
 fn create_rejects_zero_deposit() {
     let mut c = setup();
     order(&mut c, 0);
+}
+
+#[test]
+#[should_panic(expected = "Amount is below the 0.01 NEAR minimum")]
+fn min_rejects_0_009999_near() {
+    let mut c = setup();
+    at("sender.testnet", NearToken::from_yoctonear(9_999_000_000_000_000_000_000), T0);
+    c.create_order(H.into(), TTL);
+}
+
+#[test]
+fn min_accepts_exactly_0_01_near() {
+    let mut c = setup();
+    at("sender.testnet", NearToken::from_yoctonear(10_000_000_000_000_000_000_000), T0);
+    let id = c.create_order(H.into(), TTL);
+    assert_eq!(c.get_order(id).unwrap().amount, MIN_ORDER_AMOUNT);
 }
 
 #[test]
@@ -174,10 +212,17 @@ fn owner_cannot_be_payout() {
 }
 
 #[test]
-#[should_panic(expected = "Order limit must be above zero")]
+#[should_panic(expected = "Order limit must be at least 0.01 NEAR")]
 fn cap_cannot_be_zero() {
     let mut c = base();
     c.set_remit_config(acc("payout.testnet"), n(0));
+}
+
+#[test]
+#[should_panic(expected = "Order limit must be at least 0.01 NEAR")]
+fn cap_cannot_be_below_minimum() {
+    let mut c = base();
+    c.set_remit_config(acc("payout.testnet"), n(9));
 }
 
 #[test]
@@ -198,9 +243,12 @@ fn payout_settles_before_deadline() {
     let id = order(&mut c, 200);
     at("payout.testnet", n(0), deadline() - 1);
     let _ = c.settle_order(id);
+    assert_eq!(status(&c, id), OrderStatus::Settling);
+    assert_eq!(callback(&mut c, CONTRACT, id, true), OrderStatus::Settled);
     let o = c.get_order(id).unwrap();
     assert_eq!(o.status, OrderStatus::Settled);
     assert_eq!(o.recipient_hash, H);
+    assert_eq!(o.amount, n(200));
 }
 
 #[test]
@@ -231,8 +279,8 @@ fn cannot_settle_at_deadline() {
 }
 
 #[test]
-#[should_panic(expected = "Order is not open")]
-fn cannot_settle_twice() {
+#[should_panic(expected = "Order has a transfer in progress")]
+fn cannot_settle_twice_while_pending() {
     let mut c = setup();
     let id = order(&mut c, 200);
     at("payout.testnet", n(0), T0);
@@ -242,7 +290,31 @@ fn cannot_settle_twice() {
 
 #[test]
 #[should_panic(expected = "Order is not open")]
+fn cannot_settle_twice_after_success() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    at("payout.testnet", n(0), T0);
+    let _ = c.settle_order(id);
+    callback(&mut c, CONTRACT, id, true);
+    at("payout.testnet", n(0), T0);
+    let _ = c.settle_order(id);
+}
+
+#[test]
+#[should_panic(expected = "Order is not open")]
 fn cannot_settle_after_refund() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    at("sender.testnet", n(0), deadline());
+    let _ = c.refund_order(id);
+    callback(&mut c, CONTRACT, id, true);
+    at("payout.testnet", n(0), T0);
+    let _ = c.settle_order(id);
+}
+
+#[test]
+#[should_panic(expected = "Order has a transfer in progress")]
+fn cannot_settle_while_refund_pending() {
     let mut c = setup();
     let id = order(&mut c, 200);
     at("sender.testnet", n(0), deadline());
@@ -278,6 +350,8 @@ fn sender_refunds_after_deadline() {
     let id = order(&mut c, 200);
     at("sender.testnet", n(0), deadline());
     let _ = c.refund_order(id);
+    assert_eq!(status(&c, id), OrderStatus::Refunding);
+    assert_eq!(callback(&mut c, CONTRACT, id, true), OrderStatus::Refunded);
     let o = c.get_order(id).unwrap();
     assert_eq!(o.status, OrderStatus::Refunded);
     assert_eq!(o.recipient_hash, H);
@@ -311,12 +385,24 @@ fn owner_cannot_refund() {
 }
 
 #[test]
-#[should_panic(expected = "Order is already refunded")]
-fn cannot_refund_twice() {
+#[should_panic(expected = "Order has a transfer in progress")]
+fn cannot_refund_twice_while_pending() {
     let mut c = setup();
     let id = order(&mut c, 200);
     at("sender.testnet", n(0), deadline());
     let _ = c.refund_order(id);
+    let _ = c.refund_order(id);
+}
+
+#[test]
+#[should_panic(expected = "Order is already refunded")]
+fn cannot_refund_twice_after_success() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    at("sender.testnet", n(0), deadline());
+    let _ = c.refund_order(id);
+    callback(&mut c, CONTRACT, id, true);
+    at("sender.testnet", n(0), deadline());
     let _ = c.refund_order(id);
 }
 
@@ -327,8 +413,132 @@ fn cannot_refund_after_settle() {
     let id = order(&mut c, 200);
     at("payout.testnet", n(0), T0);
     let _ = c.settle_order(id);
+    callback(&mut c, CONTRACT, id, true);
     at("sender.testnet", n(0), deadline() + 10 * SEC);
     let _ = c.refund_order(id);
+}
+
+#[test]
+#[should_panic(expected = "Order has a transfer in progress")]
+fn cannot_refund_while_settle_pending() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    at("payout.testnet", n(0), deadline() - 1);
+    let _ = c.settle_order(id);
+    at("sender.testnet", n(0), deadline());
+    let _ = c.refund_order(id);
+}
+
+// ---------- transfer callback ----------
+
+#[test]
+fn failed_settle_returns_order_to_open_and_can_retry() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    at("payout.testnet", n(0), T0);
+    let _ = c.settle_order(id);
+    assert_eq!(callback(&mut c, CONTRACT, id, false), OrderStatus::Open);
+    let o = c.get_order(id).unwrap();
+    assert_eq!((o.amount, o.recipient_hash.as_str()), (n(200), H));
+    at("payout.testnet", n(0), T0);
+    let _ = c.settle_order(id);
+    assert_eq!(callback(&mut c, CONTRACT, id, true), OrderStatus::Settled);
+}
+
+#[test]
+fn failed_settle_after_deadline_lets_sender_refund() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    at("payout.testnet", n(0), deadline() - 1);
+    let _ = c.settle_order(id);
+    callback(&mut c, CONTRACT, id, false);
+    at("sender.testnet", n(0), deadline());
+    let _ = c.refund_order(id);
+    assert_eq!(callback(&mut c, CONTRACT, id, true), OrderStatus::Refunded);
+}
+
+#[test]
+fn failed_refund_returns_order_to_open_and_can_retry() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    at("sender.testnet", n(0), deadline());
+    let _ = c.refund_order(id);
+    assert_eq!(callback(&mut c, CONTRACT, id, false), OrderStatus::Open);
+    assert_eq!(c.get_order(id).unwrap().amount, n(200));
+    at("sender.testnet", n(0), deadline());
+    let _ = c.refund_order(id);
+    assert_eq!(callback(&mut c, CONTRACT, id, true), OrderStatus::Refunded);
+}
+
+#[test]
+#[should_panic(expected = "Order deadline has passed")]
+fn failed_settle_does_not_extend_deadline() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    at("payout.testnet", n(0), deadline() - 1);
+    let _ = c.settle_order(id);
+    callback(&mut c, CONTRACT, id, false);
+    at("payout.testnet", n(0), deadline());
+    let _ = c.settle_order(id);
+}
+
+#[test]
+#[should_panic(expected = "Only the contract can finish a transfer")]
+fn sender_cannot_call_callback() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    at("sender.testnet", n(0), deadline());
+    let _ = c.refund_order(id);
+    callback(&mut c, "sender.testnet", id, true);
+}
+
+#[test]
+#[should_panic(expected = "Only the contract can finish a transfer")]
+fn payout_cannot_call_callback() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    at("payout.testnet", n(0), T0);
+    let _ = c.settle_order(id);
+    callback(&mut c, "payout.testnet", id, true);
+}
+
+#[test]
+#[should_panic(expected = "Only the contract can finish a transfer")]
+fn agent_cannot_call_callback() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    callback(&mut c, "agent.testnet", id, true);
+}
+
+#[test]
+#[should_panic(expected = "Order has no transfer in progress")]
+fn callback_on_open_order_is_rejected() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    callback(&mut c, CONTRACT, id, true);
+}
+
+#[test]
+#[should_panic(expected = "Order has no transfer in progress")]
+fn duplicate_callback_is_rejected() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    at("payout.testnet", n(0), T0);
+    let _ = c.settle_order(id);
+    callback(&mut c, CONTRACT, id, true);
+    callback(&mut c, CONTRACT, id, true);
+}
+
+#[test]
+#[should_panic(expected = "Amount exceeds earned revenue")]
+fn failed_transfer_does_not_create_revenue() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    at("payout.testnet", n(0), T0);
+    let _ = c.settle_order(id);
+    callback(&mut c, CONTRACT, id, false);
+    at("owner.testnet", n(0), T0);
+    let _ = c.withdraw_revenue(n(1));
 }
 
 // ---------- agent is locked out ----------
@@ -385,6 +595,7 @@ fn order_money_not_added_to_revenue() {
     let id = order(&mut c, 300);
     at("payout.testnet", n(0), T0);
     let _ = c.settle_order(id);
+    callback(&mut c, CONTRACT, id, true);
     let beauty = c.get_industries().into_iter().find(|(k, _)| k == "beauty").unwrap().1;
     assert_eq!(beauty.revenue, n(100));
     // Revenue is still 100: withdrawing 101 must fail.
@@ -426,7 +637,15 @@ fn remit_public_methods_are_exactly_these() {
         .collect();
     assert_eq!(
         methods,
-        ["set_remit_config", "create_order", "refund_order", "settle_order", "get_order", "get_remit_config"]
+        [
+            "set_remit_config",
+            "create_order",
+            "refund_order",
+            "settle_order",
+            "on_order_transfer",
+            "get_order",
+            "get_remit_config"
+        ]
     );
 }
 

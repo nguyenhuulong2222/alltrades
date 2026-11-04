@@ -8,20 +8,34 @@
 //! Remit state lives under its own storage keys, so the job contract's state
 //! layout is unchanged and the deployed contract needs no migration.
 //! Order money never touches `total_revenue`, so `withdraw_revenue` cannot reach it.
+//!
+//! Transfers are two-step: settle/refund moves the order to Settling/Refunding and
+//! sends the NEAR; the private callback `on_order_transfer` marks it Settled/Refunded
+//! only if the transfer succeeded. If it failed, the NEAR is back in the contract and
+//! the order returns to Open, so it can be settled (before the deadline) or refunded
+//! (after it) again.
 
 use crate::*;
 use near_sdk::borsh;
 use near_sdk::json_types::U64;
+use near_sdk::{Gas, PromiseError};
 
 const CONFIG_KEY: &[u8] = b"remit:cfg";
 const ORDER_PREFIX: &[u8] = b"remit:o:";
 pub const MIN_TTL_SECS: u32 = 60;
 pub const MAX_TTL_SECS: u32 = 7 * 24 * 3600;
+/// 0.01 NEAR. Each order's storage is paid by the contract, so dust orders are refused.
+pub const MIN_ORDER_AMOUNT: NearToken = NearToken::from_millinear(10);
+const CALLBACK_GAS: Gas = Gas::from_tgas(10);
 
 #[near(serializers = [json, borsh])]
 #[derive(Clone, PartialEq, Debug)]
 pub enum OrderStatus {
     Open,
+    /// Transfer to the payout account sent, waiting for the callback.
+    Settling,
+    /// Transfer back to the sender sent, waiting for the callback.
+    Refunding,
     Settled,
     Refunded,
 }
@@ -60,7 +74,7 @@ impl Contract {
         self.assert_owner();
         require!(payout != self.agent, "Payout account cannot be the agent");
         require!(payout != self.owner, "Payout account cannot be the owner");
-        require!(!max_order_amount.is_zero(), "Order limit must be above zero");
+        require!(max_order_amount >= MIN_ORDER_AMOUNT, "Order limit must be at least 0.01 NEAR");
         let next_order_id = read_config().map(|c| c.next_order_id).unwrap_or(0);
         write_config(&RemitConfig { payout, max_order_amount, next_order_id });
     }
@@ -76,6 +90,7 @@ impl Contract {
 
         let amount = env::attached_deposit();
         require!(!amount.is_zero(), "Attach a deposit to create an order");
+        require!(amount >= MIN_ORDER_AMOUNT, "Amount is below the 0.01 NEAR minimum");
         require!(amount <= cfg.max_order_amount, "Amount exceeds the per-order limit");
         require!(is_sha256_hex(&recipient_hash), "recipient_hash must be 64 lowercase hex characters");
         require!(
@@ -107,11 +122,12 @@ impl Contract {
         require!(caller == order.sender, "Only the sender can refund");
         require!(order.status != OrderStatus::Settled, "Order is already settled");
         require!(order.status != OrderStatus::Refunded, "Order is already refunded");
+        require_not_pending(&order);
         require!(env::block_timestamp() >= order.deadline_ns.0, "Deadline has not passed");
 
-        order.status = OrderStatus::Refunded;
+        order.status = OrderStatus::Refunding;
         write_order(&order);
-        Promise::new(order.sender).transfer(order.amount)
+        transfer_then_finish(order.sender, order.amount, order_id)
     }
 
     // ---------- Simulated payout partner ----------
@@ -122,12 +138,40 @@ impl Contract {
         self.assert_not_agent(&caller);
         let mut order = read_order(order_id).expect("Unknown order");
         require!(caller == order.payout, "Only the payout account can settle");
+        require_not_pending(&order);
         require!(order.status == OrderStatus::Open, "Order is not open");
         require!(env::block_timestamp() < order.deadline_ns.0, "Order deadline has passed");
 
-        order.status = OrderStatus::Settled;
+        order.status = OrderStatus::Settling;
         write_order(&order);
-        Promise::new(order.payout).transfer(order.amount)
+        transfer_then_finish(order.payout, order.amount, order_id)
+    }
+
+    // ---------- Callback (contract only) ----------
+
+    /// Finalizes a settle or refund. Success: Settled/Refunded. Failure: the NEAR came
+    /// back to the contract, so the order returns to Open and nothing is lost.
+    #[private]
+    pub fn on_order_transfer(&mut self, order_id: u64) -> OrderStatus {
+        // Same rule as #[private], checked again in the body so unit tests can exercise it.
+        require!(
+            env::predecessor_account_id() == env::current_account_id(),
+            "Only the contract can finish a transfer"
+        );
+        let mut order = read_order(order_id).expect("Unknown order");
+        let ok = match env::promise_result_checked(0, 0) {
+            Ok(_) | Err(PromiseError::TooLong(_)) => true,
+            Err(_) => false,
+        };
+        order.status = match (&order.status, ok) {
+            (OrderStatus::Settling, true) => OrderStatus::Settled,
+            (OrderStatus::Refunding, true) => OrderStatus::Refunded,
+            (OrderStatus::Settling | OrderStatus::Refunding, false) => OrderStatus::Open,
+            _ => env::panic_str("Order has no transfer in progress"),
+        };
+        env::log_str(&format!("order {} transfer {}: {:?}", order_id, if ok { "ok" } else { "failed" }, order.status));
+        write_order(&order);
+        order.status
     }
 
     // ---------- Views ----------
@@ -145,6 +189,21 @@ impl Contract {
     fn assert_not_agent(&self, who: &AccountId) {
         require!(*who != self.agent, "Agent cannot use remit orders");
     }
+}
+
+fn require_not_pending(order: &TransferOrder) {
+    require!(
+        order.status != OrderStatus::Settling && order.status != OrderStatus::Refunding,
+        "Order has a transfer in progress"
+    );
+}
+
+fn transfer_then_finish(to: AccountId, amount: NearToken, order_id: u64) -> Promise {
+    Promise::new(to).transfer(amount).then(
+        Contract::ext(env::current_account_id())
+            .with_static_gas(CALLBACK_GAS)
+            .on_order_transfer(order_id),
+    )
 }
 
 fn is_sha256_hex(s: &str) -> bool {
