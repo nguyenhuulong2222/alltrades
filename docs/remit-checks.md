@@ -78,3 +78,30 @@ Sources:
   - The callback can only be called by the contract itself: `#[private]`, plus the same check in the method body.
 - **`refund_job` is unchanged and still has the old weakness.** It marks the job `Refunded` before its transfer. If that transfer fails, the NEAR returns to the contract, but the job stays `Refunded` and is counted in neither revenue nor any open job. It can then only be recovered by a contract upgrade. This change applies to Remit orders only.
 - **Callback gas.** The callback is given 10 Tgas. Call `settle_order` and `refund_order` with at least 50 Tgas. If the callback runs out of gas, the order stays `Settling` or `Refunding` and no method can recover it. A future fix could add an owner-only `resolve_stuck_order`. That has not been built.
+
+## 6. Testnet deployment log
+
+All on testnet. Explorer links: https://testnet.nearblocks.io/txns/<hash>
+
+**2026-11-04: first Remit deploy** (callback-confirmed settle and refund)
+- Before the deploy, the wasm running on chain was `AwkZQUbz…3GpN`. It was backed up locally and matched the on-chain `code_hash`.
+- The deployed wasm is `BjALTWgb4tp7BU6zHqS3M8cS4CV84TX5n12Z9FZC9LyM`. The `code_hash` matched after the deploy (tx `4m8TPa1XedV2pg75FrjPhcceAKFF8bx6wu8H8g3PusWv`).
+- `get_industries` and `get_job` 0–11 were byte-identical before and after.
+- Config: `set_remit_config` set payout to `payout-long2222.testnet` and the cap to 0.5 NEAR (tx `EWu9F3ymS77vhGmN7MuNxQCaqoqFAyUvwynVr2yxwZye`).
+- Order 0 (0.1 NEAR): created in tx `4zJ741GHeUiQEnrc51TnC54FUeewsP9GeQ3zDZFyLqma`, settled in tx `FAJWHD9LU4vW2dL157iStTxHHCPvUPo7FwSCGPuTfv1n`.
+  - The transfer receipt sent 0.1 NEAR to payout, and `on_order_transfer` returned `"Settled"`.
+  - Total gas was 4.96 Tgas.
+- Order 1 (0.05 NEAR, 60 s): created in tx `DCvWSn6RSz62ArErDkfcbHW8qqG5hDJngLr7Wtxuqxid`.
+  - A late settle was rejected with "Order deadline has passed". near-cli printed no hash for the failed tx.
+  - The refund went through in tx `GXsjkt8bmZCD5YSS4RNSaiBrgWuzPx3XmjekPA9By7vZ`: 0.05 NEAR returned to the client, and the callback returned `"Refunded"`.
+
+**2026-11-04: gas floor deploy**
+- The deployed wasm is `8yKJM736evgs1P5RWWKhmNEZ5DH77PA7QQLTVPV3HuYe`. The `code_hash` matched (tx `Axo39CsMAm655Eo1JtpzeJansABfRh1gx37m166ZZ7Vg`).
+- `get_industries`, `get_job` 0–11, `get_remit_config` and `get_order` 0–1 were byte-identical before and after.
+- Order 2 (0.02 NEAR) was created in tx `6fyVbhxF5pPRb8JDuLWVsryZbcjDaWPJvNGkouC53D1f`.
+- **19.999 Tgas was rejected:** tx `3aTZQXNs5B3KDJQTCttnqnpFAgMppnuB1Z4xvXR3wraA`.
+  - The prepaid gas was exactly `19999000000000`. near-cli displays it as "20.0 Tgas", so we decoded the signed transaction to check the real value.
+  - The receipt failed with "Smart contract panicked: Attach at least 20 Tgas", and order 2 stayed `Open`.
+- **Exactly 20 Tgas was accepted:** tx `HqZ7kjWv6GtCxcc2GDVHdt4axcWx3ifob8asTDTGGoqg`, with prepaid gas `20000000000000`.
+  - The transfer sent 0.02 NEAR to payout, and the callback returned `"Settled"`.
+  - Total gas burnt was 4.97 Tgas.
