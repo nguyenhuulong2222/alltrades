@@ -230,5 +230,10 @@ impl Contract {
     }
 }
 
+mod remit;
+pub use remit::*;
+
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod remit_tests;
