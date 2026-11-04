@@ -1,0 +1,10 @@
+{
+  "_fixture": "Synthetic get_order result. Sample hash, test accounts only.",
+  "id": 7,
+  "sender": "client-long2222.testnet",
+  "payout": "payout-long2222.testnet",
+  "recipient_hash": "5cefc3df8e5f97ec425ae98f9bddba6f371ccc19301d247757d53c43a3b8077b",
+  "amount": "20000000000000000000000",
+  "deadline_ns": "1893456000000000000",
+  "status": "Open"
+}
