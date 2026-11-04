@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AllTrades Autopilot</title>
+<link rel="icon" href="data:,">
+<meta name="description" content="Read-only view of Jobs v2 autopilot on NEAR testnet. Simulated clients, no external marketplace.">
+<style>
+  :root {
+    --bg: #f6f5f1; --surface: #ffffff; --text: #1d1d1b; --muted: #6b6a64; --line: #e3e1da;
+    --pos: #1f7a4d; --neg: #b3261e; --accent: #2b5fd9; --warn-bg: #fff4d6; --warn-text: #6b4e00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141413; --surface: #1e1e1c; --text: #ecebe6; --muted: #a09f98; --line: #33332f;
+      --pos: #5cc28d; --neg: #f08a80; --accent: #8fb0ff; --warn-bg: #3a3120; --warn-text: #f2d48a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+  nav a { margin-right: 12px; font-size: 0.9rem; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+  h1 { font-size: 1.5rem; margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 1.15rem; margin: 28px 0 8px; }
+  .sub { color: var(--muted); font-size: 0.9rem; margin: 4px 0 0; }
+  .banner { margin: 16px 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-bg); color: var(--warn-text); font-weight: 600; font-size: 0.95rem; }
+  .banner span { display: inline-block; margin-right: 12px; }
+  .totals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 12px 0; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+  .tile .label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .tile .value { font-size: 1.25rem; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+  .card h3 { font-size: 1rem; margin: 0; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 8px; }
+  .pill { font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .pill.Paid { color: var(--pos); border-color: var(--pos); }
+  .pill.Refunded, .pill.Cancelled { color: var(--accent); border-color: var(--accent); }
+  .pill.Open, .pill.Delivered, .pill.Disputed, .pill.Cancelling, .pill.Refunding, .pill.paused { color: var(--warn-text); border-color: var(--warn-text); }
+  .pill.running { color: var(--pos); border-color: var(--pos); }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 10px 0 0; font-size: 0.92rem; }
+  dt { color: var(--muted); } dd { margin: 0; text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+  .links { margin-top: 10px; font-size: 0.88rem; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .counts { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
+  .state { background: var(--surface); border: 1px dashed var(--line); border-radius: 10px; padding: 18px; text-align: center; color: var(--muted); }
+  .state.error { border-style: solid; border-color: var(--neg); color: var(--text); }
+  button { font: inherit; font-size: 0.9rem; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; }
+  button:disabled { opacity: 0.6; cursor: default; }
+  a { color: var(--accent); }
+  code { font-size: 0.85em; overflow-wrap: anywhere; }
+  footer { margin-top: 32px; color: var(--muted); font-size: 0.85rem; }
+  footer p { margin: 4px 0; }
+  @media (max-width: 640px) { h1 { font-size: 1.3rem; } .totals { grid-template-columns: repeat(2, 1fr); } .cards { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <nav><a href="./">Ledger</a><a href="./autopilot.html" aria-current="page">Autopilot</a><a href="./remit.html">Remit</a></nav>
+  <header>
+    <div>
+      <h1>Jobs v2 autopilot</h1>
+      <p class="sub">Contract <code id="contract"></code> · read-only via public RPC · no wallet, no login</p>
+    </div>
+    <button id="refresh" type="button">Refresh</button>
+  </header>
+
+  <div class="banner" role="note">
+    <span>Testnet.</span>
+    <span>Simulated clients.</span>
+    <span>No external marketplace.</span>
+    <span>Owner arbitration is demo-only.</span>
+  </div>
+
+  <section id="status" aria-live="polite"></section>
+  <h2>Jobs</h2>
+  <section id="jobs" aria-live="polite"></section>
+
+  <footer>
+    <p>Clients are our own test account running a script. The worker only works on fictional briefs from the public catalog, identified by hash; deliverable text is not shown here.</p>
+    <p><strong>Revenue</strong> is the contract's total from all paid jobs (v1 and v2), read from <code>get_industries</code>. <strong>Escrow</strong> is v2 deposits not yet paid or returned.</p>
+    <p id="updated"></p>
+  </footer>
+</main>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const CONTRACT = 'alltrades-long2222.testnet';
+  const EXPLORER = 'https://testnet.nearblocks.io/txns/';
+  const TIMEOUT_MS = 15000;
+  // Testnet RPCs, tried in order. rpc.testnet.near.org is deprecated (HTTP 429) and not used.
+  const DEFAULT_RPCS = ['https://test.rpc.fastnear.com', 'https://near-testnet.drpc.org', 'https://archival-rpc.testnet.fastnear.com'];
+  const RPCS = params.get('rpc') ? [params.get('rpc'), ...DEFAULT_RPCS.filter((u) => u !== params.get('rpc'))] : DEFAULT_RPCS;
+  const TRANSIENT = new Set([408, 425, 429, 500, 502, 503, 504]);
+  let rpcIndex = 0;
+
+  /** One JSON-RPC call with failover: on 429/5xx/timeout/network errors, try the next endpoint. */
+  async function rpcQuery(params) {
+    let last = 'no endpoint answered';
+    for (let n = 0; n < RPCS.length; n++) {
+      const url = RPCS[(rpcIndex + n) % RPCS.length];
+      try {
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS),
+          body: JSON.stringify({ jsonrpc: '2.0', id: 'dashboard', method: 'query', params }) });
+        if (TRANSIENT.has(res.status)) { last = `HTTP ${res.status}`; continue; }
+        if (!res.ok) throw new Error(`RPC returned HTTP ${res.status}`);
+        const json = await res.json();
+        if (json.error?.code === -429) { last = 'rate limited'; continue; }
+        rpcIndex = (rpcIndex + n) % RPCS.length;
+        return json;
+      } catch (e) {
+        if (e.name === 'TimeoutError' || e.name === 'AbortError' || e instanceof TypeError) { last = e.name === 'TimeoutError' ? `timeout after ${TIMEOUT_MS / 1000}s` : 'network error'; continue; }
+        throw e;
+      }
+    }
+    throw new Error(`No testnet RPC answered (${last})`);
+  }
+  async function view(method, args = {}) {
+    const j = await rpcQuery({ request_type: 'call_function', finality: 'final', account_id: CONTRACT, method_name: method,
+      args_base64: btoa(JSON.stringify(args)) });
+    if (j.error || j.result?.error) throw new Error(`View ${method} failed`);
+    return JSON.parse(new TextDecoder().decode(new Uint8Array(j.result.result)) || 'null');
+  }
+
+  const $ = (id) => document.getElementById(id);
+  $('contract').textContent = CONTRACT;
+  const el = (tag, attrs = {}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) k === 'class' ? (n.className = v) : n.setAttribute(k, v);
+    for (const kid of kids) if (kid !== null && kid !== undefined) n.append(kid);
+    return n;
+  };
+  /** yoctoNEAR (string) → "1.234 Ⓝ" using BigInt, no rounding up. */
+  const near = (yocto) => {
+    const y = BigInt(yocto), Y = 10n ** 24n;
+    return `${y / Y}.${((y % Y) / 10n ** 21n).toString().padStart(3, '0')} Ⓝ`;
+  };
+  const sum = (xs) => xs.reduce((s, x) => s + BigInt(x), 0n);
+  const tile = (label, value) => el('div', { class: 'tile' }, el('div', { class: 'label' }, label), el('div', { class: 'value' }, value));
+  const ESCROW = new Set(['Open', 'Delivered', 'Disputed', 'Cancelling', 'Refunding']);
+  const TX_LABEL = { create: 'create', deliver: 'deliver', dispute: 'dispute', resolve: 'owner ruling', cancel: 'cancel', finalize: 'finalize' };
+  const DAY_NS = 86400n * 10n ** 9n;
+
+  async function loadJobs(cfg) {
+    const jobs = [];
+    for (let from = 0; from < Number(cfg.next_job_id); from += 50) jobs.push(...(await view('get_jobs_v2', { from, limit: 50 })));
+    return jobs;
+  }
+
+  async function load() {
+    $('refresh').disabled = true;
+    $('status').replaceChildren(el('p', { class: 'sub', role: 'status' }, 'Loading from NEAR testnet…'));
+    $('jobs').replaceChildren();
+    try {
+      const [cfg, industries, txs] = await Promise.all([
+        view('get_autopilot'),
+        view('get_industries'),
+        fetch('data/autopilot-txs.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : { jobs: {} })).catch(() => ({ jobs: {} })),
+      ]);
+      if (!cfg) { $('status').replaceChildren(el('div', { class: 'state' }, 'Autopilot is not configured on this contract.')); return; }
+      const jobs = await loadJobs(cfg);
+
+      const revenue = sum(industries.map(([, i]) => i.revenue));
+      const escrow = sum(jobs.filter((j) => ESCROW.has(j.status)).map((j) => j.amount));
+      const v2Paid = sum(jobs.filter((j) => j.status === 'Paid').map((j) => j.amount));
+      const todayIndex = BigInt(Date.now()) * 1000000n / DAY_NS;
+      const deliveredToday = BigInt(cfg.day_index) === todayIndex ? cfg.delivered_today : 0;
+      const counts = jobs.reduce((m, j) => ({ ...m, [j.status]: (m[j.status] ?? 0) + 1 }), {});
+
+      $('status').replaceChildren(
+        el('div', { class: 'totals' },
+          tile('Autopilot', cfg.paused ? 'Paused' : 'Running'),
+          tile('Deliveries today (UTC)', `${deliveredToday} / ${cfg.max_deliveries_per_day}`),
+          tile('Revenue (all jobs)', near(revenue)),
+          tile('Escrow (v2)', near(escrow)),
+        ),
+        el('dl', {},
+          el('dt', {}, 'Worker account'), el('dd', {}, el('code', {}, cfg.worker)),
+          el('dt', {}, 'Review window'), el('dd', {}, `${Math.round(cfg.review_window_secs / 60)} min`),
+          el('dt', {}, 'Minimum job price'), el('dd', {}, near(cfg.min_job_price)),
+          el('dt', {}, 'Paid by v2 jobs'), el('dd', {}, near(v2Paid)),
+        ),
+        el('div', { class: 'counts' }, el('span', { class: `pill ${cfg.paused ? 'paused' : 'running'}` }, cfg.paused ? 'paused' : 'running'),
+          ...Object.entries(counts).map(([s, n]) => el('span', { class: `pill ${s}` }, `${n} ${s}`))),
+      );
+
+      if (!jobs.length) { $('jobs').replaceChildren(el('div', { class: 'state' }, 'No v2 jobs yet.')); return; }
+      $('jobs').replaceChildren(el('div', { class: 'cards' }, ...jobs.slice().reverse().map((j) => {
+        const t = txs.jobs?.[j.id] ?? {};
+        const links = Object.entries(t).map(([k, h]) => el('a', { href: EXPLORER + h, target: '_blank', rel: 'noopener' }, `${TX_LABEL[k] ?? k} ${h.slice(0, 8)}…`));
+        return el('article', { class: 'card' },
+          el('h3', {}, el('span', {}, `Job #${j.id}`), el('span', { class: `pill ${j.status}` }, j.status)),
+          el('dl', {},
+            el('dt', {}, 'Industry'), el('dd', {}, j.industry),
+            el('dt', {}, 'Brief'), el('dd', {}, el('code', {}, j.brief_id)),
+            el('dt', {}, 'Deposit'), el('dd', {}, near(j.amount)),
+            el('dt', {}, 'Estimated cost'), el('dd', {}, near(j.cost)),
+            el('dt', {}, 'Deliverable hash'), el('dd', {}, j.deliverable_hash ? el('code', {}, `${j.deliverable_hash.slice(0, 12)}…`) : '—'),
+          ),
+          links.length ? el('div', { class: 'links' }, ...links) : el('p', { class: 'sub' }, 'No tx links recorded for this job.'),
+        );
+      })));
+      $('updated').textContent = `Last updated ${new Date().toLocaleString()} (finality: final).`;
+    } catch (e) {
+      const retry = el('button', { type: 'button' }, 'Try again');
+      retry.addEventListener('click', load);
+      $('status').replaceChildren(el('div', { class: 'state error', role: 'alert' }, el('p', {}, `Could not load autopilot data: ${e.message}.`), retry));
+    } finally {
+      $('refresh').disabled = false;
+    }
+  }
+  $('refresh').addEventListener('click', load);
+  load();
+})();
+</script>
+</body>
+</html>

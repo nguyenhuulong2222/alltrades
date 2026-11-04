@@ -52,3 +52,33 @@ test('dashboard pages fail over between testnet RPCs and never use the deprecate
     assert.ok(!/fetch\(['"]https:\/\/rpc\.testnet\.near\.org/.test(page) && !page.includes("'https://rpc.testnet.near.org'"), f);
   }
 });
+const ap = read('dashboard/autopilot.html');
+test('autopilot page reads live data from the three views and shows the required labels', () => {
+  for (const m of ["view('get_autopilot')", "view('get_industries')", "view('get_jobs_v2'"]) assert.ok(ap.includes(m), m);
+  for (const s of ['Testnet.', 'Simulated clients.', 'No external marketplace.', 'Owner arbitration is demo-only.']) assert.ok(ap.includes(s), s);
+  for (const s of ['Deliveries today', 'Revenue', 'Escrow', 'Worker account', 'Autopilot']) assert.ok(ap.includes(s), s);
+});
+test('autopilot page hard-codes no revenue, escrow or balance figures', () => {
+  const script = ap.slice(ap.indexOf('<script>'));
+  assert.ok(!/\b3\.6|\b2\.3|\b0\.95\b|\d{22,}/.test(script), 'no ledger numbers in code');
+});
+test('autopilot page: no wallet, no storage, no deliverable text, testnet failover only', () => {
+  assert.ok(!/localStorage|sessionStorage|indexedDB|wallet-selector|near-connect|signIn/i.test(ap));
+  assert.ok(!/\.text\b|deliverable_text|brief:/.test(ap.slice(ap.indexOf('<script>'))), 'never renders deliverable or brief text');
+  assert.match(ap, /async function rpcQuery/);
+  assert.ok(!/rpc\.mainnet|near\.org['"]/.test(ap));
+});
+test('autopilot tx map holds only testnet tx hashes for known actions', () => {
+  const t = JSON.parse(read('dashboard/data/autopilot-txs.json'));
+  const allowed = new Set(['create', 'deliver', 'dispute', 'resolve', 'cancel', 'finalize']);
+  for (const v of Object.values(t.jobs)) for (const [k, h] of Object.entries(v)) {
+    assert.ok(allowed.has(k), k);
+    assert.match(h, /^[1-9A-HJ-NP-Za-km-z]{43,44}$/);
+  }
+});
+test('every dashboard page links to the others', () => {
+  for (const f of ['dashboard/index.html', 'dashboard/remit.html', 'dashboard/autopilot.html']) {
+    const p = read(f);
+    for (const href of ['./"', './remit.html', './autopilot.html']) assert.ok(p.includes(`href="${href.replace('"', '')}`) || p.includes(`href="${href}`), `${f} → ${href}`);
+  }
+});
