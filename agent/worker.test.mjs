@@ -376,3 +376,26 @@ test('transient submit error after the tx landed: the re-read finds it Delivered
   assert.equal(h.chain.calls.submit.length, 1, 'never sent twice');
   assert.equal(h.ai.calls, 1);
 });
+test('jobs settled by an owner ruling or refund are synced from the chain, never finalized by the worker', async () => {
+  const h = harness();
+  const paid = h.chain.add('lani-nails-fall');
+  const refunded = h.chain.add('pho-lani-review');
+  await h.run();
+  await h.run();
+  assert.deepEqual([h.state().jobs[paid].status, h.state().jobs[refunded].status], ['delivered', 'delivered']);
+  h.chain.jobs.get(paid).status = 'Disputed';
+  h.chain.jobs.get(refunded).status = 'Disputed';
+  const r1 = await h.run();
+  assert.deepEqual(r1.synced, [{ id: paid, chain_status: 'Disputed' }, { id: refunded, chain_status: 'Disputed' }]);
+  assert.equal(h.state().jobs[paid].status, 'disputed');
+  h.chain.jobs.get(paid).status = 'Paid'; // owner ruled for the worker
+  h.chain.jobs.get(refunded).status = 'Refunded'; // owner ruled a refund
+  h.advance(REVIEW_MS + 1);
+  const r2 = await h.run();
+  assert.deepEqual(r2.synced, [{ id: paid, chain_status: 'Paid' }, { id: refunded, chain_status: 'Refunded' }]);
+  assert.deepEqual([h.state().jobs[paid].status, h.state().jobs[refunded].status], ['settled', 'closed']);
+  assert.deepEqual(h.chain.calls.finalize, []);
+  const r3 = await h.run();
+  assert.deepEqual(r3.synced, [], 'synced once, then stable');
+  assert.equal(h.ai.calls, 2);
+});

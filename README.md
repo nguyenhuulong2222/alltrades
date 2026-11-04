@@ -36,9 +36,13 @@ Every job so far was paid by our own test client, and an operator starts each ag
 
 Remit follows the same pattern: the agent only drafts, a person signs `create_order`, and the payout script is started by hand for each order.
 
-**Jobs v2 autopilot: deployed on testnet and run unattended for 3 hours.** On branch `feature/autopilot` there is a contract extension and a background worker meant to make every step above automatic except payment by a real customer (see [Jobs v2 autopilot](#jobs-v2-autopilot-testnet-one-cycle)). On 2026-11-04 the worker, started by hand with `--once`, did the following on testnet: it delivered a job and later finalized it, and it stopped on `agent/STOP` and on the contract pause. A client dispute was refunded by the owner. On the same day a 3-hour unattended `--loop` soak run delivered and paid 7/7 jobs, handled a dispute and a cancel, and survived a `agent/STOP` drill. The log is in [`docs/autopilot-checks.md`](docs/autopilot-checks.md). The table above describes the v1 flow; the table below describes v2. In both, **the clients are simulated** (our own test account), **the worker does not find work on any external market**, and **the owner as dispute arbiter is acceptable for a demo only**.
+**Jobs v2 autopilot: deployed on testnet; the worker ran on its own for 3 hours.** A contract extension and a background worker make the steps in the table above automatic, except payment by a real customer (see [Jobs v2 autopilot](#jobs-v2-autopilot-testnet-3-hour-worker-run)). It was tested twice on testnet on 2026-11-04:
+- **Supervised run:** we started the worker by hand, one pass at a time (`--once`). It delivered a job and later finalized it, and it stopped on `agent/STOP` and on the contract pause. A client dispute was refunded by the owner.
+- **3-hour soak run:** the worker ran by itself in `--loop` mode, with a simulated client and a monitor. It delivered and got paid for 7/7 jobs, handled a dispute and a cancel, and recovered from an `agent/STOP` drill.
 
-| Step | Jobs v2 on testnet (3-hour unattended run, 2026-11-04) |
+"Unattended" here describes only how the worker was operated. **The clients are simulated** (a script using our own test account), **the worker does not find work on any external market**, and **the owner as dispute arbiter is acceptable for a demo only**. The table above describes the v1 flow; the table below describes v2. The full log is in [`docs/autopilot-checks.md`](docs/autopilot-checks.md).
+
+| Step | Jobs v2 on testnet (3-hour `--loop` worker run with a simulated client, 2026-11-04) |
 |---|---|
 | Find work | **Yes, on our own contract only.** The worker polls `get_open_jobs_v2` every 60 s. Jobs come from a simulated client; there is no external marketplace. |
 | Bid | Out of scope. There is no bidding, and NEAR AI Agent Market is out of scope before 2026-11-14. |
@@ -82,7 +86,7 @@ NEAR RPC rejected the transfer during transaction validation, so it never reache
 
 **5. Run the tests.**
 ```bash
-npm install && npm test            # 112 tests: packs, quality gate, key check, reallocate throttle, Remit agent, payout script, dashboard data, v2 worker
+npm install && npm test            # 153 tests: packs, quality gate, key check, reallocate throttle, Remit agent, payout script, dashboard data, v2 worker, RPC failover, soak monitor
 cd contract && cargo test          # 154 tests: jobs v1 (16), Remit orders (66), Jobs v2 autopilot (72)
 ```
 
@@ -167,9 +171,14 @@ Before sending anything, the agent derives the public key from `AGENT_FC_PRIVATE
 - **Quality gate before delivery:** length limits, banned phrases per pack, and rejection of unfilled placeholders such as `[Salon Name]` or `{{city}}`. Model chatter (word counts, "Here's your post:", "Let me know…") is stripped before hashing.
 - **NEAR AI calls time out after 120 s.** On timeout nothing is submitted on chain.
 
-## Jobs v2 autopilot (testnet, one cycle)
+## Jobs v2 autopilot (testnet, 3-hour worker run)
 
-> **Status: deployed to testnet on 2026-11-04 (code hash `9RukY7tq…RWzV`).** [`docs/autopilot-checks.md`](docs/autopilot-checks.md) logs two things: a supervised cycle (deliver, finalize, dispute with refund, stop drills) and a **3-hour unattended soak run** (7/7 jobs delivered and paid, a dispute ruled for the worker, a cancel before delivery, an `agent/STOP` drill, with revenue, escrow and balances reconciled exactly). A first soak attempt tripped after 4 minutes because the old public RPC was deprecated; the monitor paused autopilot as designed, and the RPC failover fix followed. **Clients are simulated, there is no external marketplace, and the owner arbitrates disputes, which is acceptable for a demo only.** Autopilot is left **paused**.
+> **Status: deployed to testnet on 2026-11-04 (code hash `9RukY7tq…RWzV`).** [`docs/autopilot-checks.md`](docs/autopilot-checks.md) logs:
+> - **A supervised run** (`--once`, started by hand): deliver, finalize, a dispute with a refund, and both stop drills.
+> - **A 3-hour soak run** (`--loop`): the worker ran without anyone starting each pass. A simulated client script created jobs and a monitor watched the run. 7/7 jobs were delivered and paid, a dispute was ruled for the worker, a cancel happened before delivery, and an `agent/STOP` drill was run. Revenue, escrow and balances reconciled exactly.
+> - **A first soak attempt** that tripped after 4 minutes because the old public RPC was deprecated. The monitor paused autopilot as designed, and the RPC failover fix followed. Failover was later checked live by pointing the worker at a broken endpoint.
+>
+> **Clients are simulated, there is no external marketplace, and the owner arbitrates disputes, which is acceptable for a demo only.** Autopilot is left **paused**.
 
 The goal is that people only set limits. The owner configures the worker account, the review window, a minimum job price, a daily delivery limit (at most 10), and a pause switch. After that:
 
@@ -185,7 +194,7 @@ Limits and stop paths:
 
 Storage: v2 lives under its own keys (`ap:*`), like Remit. The `Contract` struct is unchanged, so a deploy needs no migration, and v1 jobs keep their old rules.
 
-Tests: `cargo test` has 72 autopilot tests. They cover config, create, deliver, the daily limit, finalize-once, disputes, the closed window, cancel, owner rulings, callbacks, escrow vs. revenue, and v1/Remit isolation. `npm test` has 22 worker tests against an in-memory contract with no network: catalog, skipping, limits, STOP, pause, finalize, restart recovery, and the lock.
+Tests: `cargo test` has 72 autopilot tests. They cover config, create, deliver, the daily limit, finalize-once, disputes, the closed window, cancel, owner rulings, callbacks, escrow vs. revenue, and v1/Remit isolation. `npm test` has worker tests against an in-memory contract with no network: catalog, skipping, limits, STOP, pause, finalize, restart recovery, sync after owner rulings, transient RPC errors without duplicate delivery, and the lock. It also has RPC failover tests (429, 5xx, timeout, network errors, persistent outage).
 
 ## Remit (simulated USD → VND transfers)
 

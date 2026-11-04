@@ -88,3 +88,8 @@ Every 60 s the monitor checks for stuck refunds (over 2 min), revenue/escrow/bal
   - Industries: beauty paid 5→8, real-estate 2→3, food 0→2, fitness 1→2. Estimated cost (`spent`) rose by each delivered job's pack ceiling.
   - `delivered_today` reached 9, within the limit of 10.
 - **Known small issue.** The worker's local state still shows job 5 as "delivered", because the owner's ruling paid it rather than a finalize. This is harmless, since finalization scans the chain, but the local state is stale for jobs settled by a ruling.
+
+## Live failover check (2026-11-04, autopilot paused, no transactions)
+- `NEAR_RPC_URL=https://broken-rpc.invalid node --env-file=.env agent/worker.mjs --once` made 1 retry and 1 endpoint switch, then read `paused: true` from the fallback. Nothing was sent.
+- With `NEAR_RPC_URL=https://rpc.testnet.near.org` as primary, the old endpoint answered normally this time, so there was no switch. It remains out of the defaults.
+- The worker now syncs local state for jobs settled without its own finalize: a job in Disputed becomes `disputed`, a Paid job settled by an owner ruling becomes `settled`, and a Refunded job becomes `closed`. Job 5's stale local entry will be synced on the first pass after unpausing.

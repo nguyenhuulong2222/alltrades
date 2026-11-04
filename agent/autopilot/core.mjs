@@ -13,14 +13,16 @@ import { isTransient } from '../rpc.mjs';
 export const MAX_DELIVERABLE_BYTES = 4096;
 export const DEFAULT_LIMITS = { maxJobsPerRun: 3, maxAttempts: 2, maxCostNearPerDay: 0.25 };
 const PAGE = 50;
-const DONE = new Set(['delivered', 'finalized', 'closed', 'skipped']);
+const DONE = new Set(['delivered', 'disputed', 'settled', 'finalized', 'closed', 'skipped']);
+/** Local status for a job we delivered, given what the chain shows now (owner rulings, refunds). */
+const SYNC = { Disputed: 'disputed', Paid: 'settled', Refunding: 'disputed', Refunded: 'closed', Cancelled: 'closed' };
 
 const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
 const nsOf = (ms) => BigInt(ms) * 1_000_000n;
 
 export async function runOnce({ chain, generate, briefs, packs, statePath, stopPath, limits = {}, now = Date.now, log = () => {} }) {
   const L = { ...DEFAULT_LIMITS, ...limits };
-  const report = { stopped: null, paused: false, finalized: [], delivered: [], skipped: [], failed: [], recovered: [] };
+  const report = { stopped: null, paused: false, finalized: [], delivered: [], skipped: [], failed: [], recovered: [], synced: [] };
   const stopped = () => {
     if (existsSync(stopPath)) { report.stopped = 'STOP file present'; return true; }
     return false;
@@ -41,6 +43,14 @@ export async function runOnce({ chain, generate, briefs, packs, statePath, stopP
   //    local state, so a lost state file cannot strand a payment. Anyone may finalize.
   for (let from = 0; from < Number(cfg.next_job_id); from += PAGE) {
     for (const job of await chain.getJobs(from, PAGE)) {
+      // Keep local state in step with the chain for jobs settled without our finalize
+      // (a dispute, an owner ruling, a refund).
+      const local = state.jobs[job.id];
+      if (local && (local.status === 'delivered' || local.status === 'disputed') && SYNC[job.status] && local.status !== SYNC[job.status]) {
+        Object.assign(local, { status: SYNC[job.status], chain_status: job.status });
+        report.synced.push({ id: job.id, chain_status: job.status });
+        save();
+      }
       if (job.status !== 'Delivered' || BigInt(job.review_deadline_ns) > nsOf(now())) continue;
       if (stopped()) return report;
       const e = entry(job.id);
