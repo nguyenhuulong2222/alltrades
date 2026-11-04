@@ -37,7 +37,8 @@ export async function nearChain(env) {
   }
   const keyPair = checkedKeyPair(env.WORKER_FC_PRIVATE_KEY, env.WORKER_EXPECTED_PUBLIC_KEY); // stops on mismatch, never prints the key
   const provider = new JsonRpcProvider({ url: RPC_URL });
-  const account = new Account(env.WORKER_ID, provider, keyPair);
+  // Pass the key string: near-api-js 7 wraps it in a KeyPairSigner (a raw KeyPair object cannot sign).
+  const account = new Account(env.WORKER_ID, provider, keyPair.toString());
   const contractId = env.CONTRACT_ID;
   const view = (method, args = {}) => provider.callFunction({ contractId, method, args });
   const call = async (methodName, args) => {
@@ -47,6 +48,7 @@ export async function nearChain(env) {
     return out.transaction.hash;
   };
   return {
+    account,
     getAutopilot: () => view('get_autopilot'),
     getJobs: (from, limit) => view('get_jobs_v2', { from, limit }),
     getOpenJobs: (from, limit) => view('get_open_jobs_v2', { from, limit }),

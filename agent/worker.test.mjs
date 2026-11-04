@@ -319,3 +319,14 @@ test('worker state, lock and STOP files are gitignored', () => {
   const gi = readFileSync('.gitignore', 'utf8');
   for (const p of ['.worker-state.json', '.worker.lock', 'agent/STOP']) assert.ok(gi.includes(p), p);
 });
+test('nearChain builds a signing account from the worker key and refuses a mismatched key', async () => {
+  const { KeyPair } = await import('near-api-js');
+  const { nearChain } = await import('./worker.mjs');
+  const kp = KeyPair.fromRandom('ed25519');
+  const env = { CONTRACT_ID: 'c.testnet', WORKER_ID: 'w.testnet', WORKER_FC_PRIVATE_KEY: kp.toString(), WORKER_EXPECTED_PUBLIC_KEY: kp.getPublicKey().toString() };
+  const chain = await nearChain(env);
+  assert.equal(typeof chain.account.signer?.signTransaction, 'function', 'regression: a raw KeyPair object has no signTransaction');
+  const other = KeyPair.fromRandom('ed25519').getPublicKey().toString();
+  await assert.rejects(nearChain({ ...env, WORKER_EXPECTED_PUBLIC_KEY: other }), (e) => /key mismatch/.test(e.message) && !e.message.includes(kp.toString()));
+  await assert.rejects(nearChain({ ...env, WORKER_FC_PRIVATE_KEY: '' }), /WORKER_FC_PRIVATE_KEY is not set/);
+});
