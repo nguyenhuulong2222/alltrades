@@ -1,0 +1,56 @@
+{
+  "notice": "Public testnet transaction hashes for Jobs v2 jobs, from docs/autopilot-checks.md and the run logs. Jobs without an entry show no link.",
+  "jobs": {
+    "0": {
+      "create": "7jG2ZKZbuW9TkcTwoQz7hbAqwPkQ3w5jAdZ82fcucGGR",
+      "deliver": "8jJCoAzjH8FHgCFvA2gnHTeYv4HKCsRB8BdwR6PWyiKr",
+      "finalize": "GMkuRGCdDtXzYRv1ScHz1H9GBwurChp5CnGYExybCWYy"
+    },
+    "1": {
+      "create": "Hug2DkQ48CkyQJBsXzR8ormKp41NmJgw2KxB8YZhEqcw",
+      "deliver": "7s8QCUMPvphJDWUVpQW6cpcdJakHaG7vvqoQTGYUxb65",
+      "dispute": "5stNFZvwugUftqVw2CqGgdMybPu7RmqqjcMxNpG7ZBDp",
+      "resolve": "ArGNL91JS7KEDYXMGhMzcsHQC5YvoS2MxaLVZsMRSdTq"
+    },
+    "2": {
+      "create": "HynsRkKdzbWckUH9gtKtynTADPJ1mjdD1QABrsL73eMp",
+      "deliver": "HcWbb9Tx53yXyFmTpLxVbFAvv6zHzo1MvXCDStABMYJk",
+      "finalize": "GDG7oCgrParHnmZSYNV828LHXw7U8aCmdbRQm6LqxSUs"
+    },
+    "3": {
+      "create": "DcaweP2Q2XdRrh8nenys8vsmMLDCqwQn9zdWDcUQHDdf",
+      "deliver": "GrF48dTmgfrrdiRMTTiteoANZWrkibBfaJGcMveY299S",
+      "finalize": "HoKz3dAfV6GioA8d9iM9pCUoMkbETcEQuBsnNZv4FhQC"
+    },
+    "4": {
+      "create": "8Eq4Jidk9HTeScHhPvi6JQFhj8u9zjdfN8j18HMAP4rZ",
+      "deliver": "7HTMDJoiKiC1bLwHyR9PnhzvPxqYxenGek2zqcZBgD7K",
+      "finalize": "F9zmAVEw4P371kN7bMQawx4sp6HYCnDNMaJnvpaUuY3o"
+    },
+    "5": {
+      "create": "GNkGnLpVukzZzAaMafqBrxpcKjniiUcSkcYTiPuf1Z68",
+      "deliver": "9BNshQGy2PhhWadrR2wPKkEScVQdFdzrdpyLtpnoDcgj",
+      "dispute": "DyyiojuPiDEnPuT363NM7PxfqQEXvqcuki8Muvm72bbR",
+      "resolve": "jSADpWZ6UYK56R6r2gDFV6kxGqw59yyWJw6jSCq5oEB"
+    },
+    "6": {
+      "create": "J6WaWKKF9pG6XvnPSJ13vZF9Aadzr3vsGVuYVw4Etbf7",
+      "deliver": "3KA6kjZzegq4hU5u94AwxrwJsqraUP86fmGhwzJwv5JS",
+      "finalize": "EM19EWYYPkQithWWAspUckSUSjAZVx5NknAUim3y3dbU"
+    },
+    "7": {
+      "create": "7JWSfFe6SXgnbovDkzhSDiZH2k7k6kKofo7EVFB9dz2M",
+      "cancel": "sa39UxQpCXSf6JUyST5yLo5VRt2k9CUgyqkcRSkzT6L"
+    },
+    "8": {
+      "create": "Haoj6SRYSuvR5XsLcrn73m6Tfz9NxMuTBBsPk9tuBjvS",
+      "deliver": "CZoBLTgkunsjvSGegMFxP824EQMMzXCTPHL4j6B8tn5Z",
+      "finalize": "Sz92JDiK3cpW1rfvnScqh2az65gDzwiu89fvaVq2UbN"
+    },
+    "9": {
+      "create": "2szubTgHsYV4Fbu9WrYptBMXnMzS2Khh691pd3e9QMq4",
+      "deliver": "DBBKoAHjqqtDaaLs6nXYCXxaHR8p8JTk8xJL89GcKqnC",
+      "finalize": "4gLBApz1hNQpe1Vg1foHSQhTGchnXgXZo5q1EMHLdNYh"
+    }
+  }
+}
