@@ -105,3 +105,11 @@ All on testnet. Explorer links: https://testnet.nearblocks.io/txns/<hash>
 - **Exactly 20 Tgas was accepted:** tx `HqZ7kjWv6GtCxcc2GDVHdt4axcWx3ifob8asTDTGGoqg`, with prepaid gas `20000000000000`.
   - The transfer sent 0.02 NEAR to payout, and the callback returned `"Settled"`.
   - Total gas burnt was 4.97 Tgas.
+
+**2026-11-04: payout script on chain**
+- Order 3 (0.03 NEAR) was created in tx `BBiYquMxJr64bSEedUxPyEzPKUGa3x44gaNNvwavMZFi`.
+- `node agent/payout/settle.mjs 3` ran these steps in order:
+  1. Read the order (`Open`).
+  2. `MockPayoutProvider.deliver` returned `delivered` (`mock-1`, simulated).
+  3. `settle_order` with 30 Tgas, tx `EgJeTVKwDjeVpuQBv2yCbY2hXwDVeS4BZsPQRhX3sFmw`.
+- The transfer receipt sent 0.03 NEAR to payout, and `on_order_transfer` returned `"Settled"`.
