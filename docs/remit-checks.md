@@ -113,3 +113,12 @@ All on testnet. Explorer links: https://testnet.nearblocks.io/txns/<hash>
   2. `MockPayoutProvider.deliver` returned `delivered` (`mock-1`, simulated).
   3. `settle_order` with 30 Tgas, tx `EgJeTVKwDjeVpuQBv2yCbY2hXwDVeS4BZsPQRhX3sFmw`.
 - The transfer receipt sent 0.03 NEAR to payout, and `on_order_transfer` returned `"Settled"`.
+
+**2026-11-04: README "Run it yourself" check from a fresh clone** (no `.env`, `notes/`, `backups/` or `.agent-state.json`)
+- In the clone, `npm install` and `npm test` passed 90/90, and `cargo test` passed 82/82.
+- `cargo near build` produced the same wasm `8yKJM736…HuYe`.
+- Step 9 (live draft) printed a working `sign_command`.
+- Step 10: the sender signed order 4 in tx `A4vtNJz9XFQMZ8zsjmTbYWvJ2wKmvyBhFpAYQWa16d4m`.
+- Step 11: `settle.mjs 4 --contract … --payout …` sent tx `CoUcAWV1ye5jqwZHts6JL77cCACqPthgvfCyoX38SY7n`. The transfer was 0.05 NEAR and the callback returned `"Settled"`.
+- Step 12: the clone's dashboard showed order #4 as settled.
+- Steps 7–8 were not re-run, because the payout account and config already exist. The same commands ran earlier, in tx `6WsJAAVQ…` and `EWu9F3ym…`.
