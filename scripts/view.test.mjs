@@ -20,7 +20,7 @@ test('view sends a read-only call_function query and returns only the JSON resul
   let sent;
   const fake = async (url, init) => { sent = { url, body: JSON.parse(init.body) }; return { json: async () => ({ result: { result: [...Buffer.from('{"a":1}')] } }) }; };
   assert.deepEqual(await view('get_x', { id: 1 }, { contract: 'c.testnet', fetchImpl: fake }), { a: 1 });
-  assert.equal(sent.url, 'https://rpc.testnet.near.org');
+  assert.equal(sent.url, 'https://test.rpc.fastnear.com');
   assert.equal(sent.body.method, 'query');
   assert.equal(sent.body.params.request_type, 'call_function');
   assert.equal(sent.body.params.finality, 'final');

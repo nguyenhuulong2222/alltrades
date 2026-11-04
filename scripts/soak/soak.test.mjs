@@ -29,7 +29,7 @@ test('callArgs builds a testnet keychain call with explicit gas and deposit', ()
 });
 test('parseCliOutput returns only the tx hash or the contract error, never raw output', () => {
   const ok = parseCliOutput('│ Transaction ID: 7jG2ZKZbuW9TkcTwoQz7hbAqwPkQ3w5jAdZ82fcucGGR\nsecret stuff');
-  assert.deepEqual(ok, { tx: '7jG2ZKZbuW9TkcTwoQz7hbAqwPkQ3w5jAdZ82fcucGGR', error: null });
+  assert.deepEqual(ok, { tx: '7jG2ZKZbuW9TkcTwoQz7hbAqwPkQ3w5jAdZ82fcucGGR', error: null, transient: false });
   const bad = parseCliOutput('Error: ... ExecutionError("Smart contract panicked: Review window has closed")');
   assert.equal(bad.error, 'Review window has closed');
   const other = parseCliOutput('Error: keychain locked private_key=ed25519:abc');
@@ -131,4 +131,43 @@ test('soak scripts never read .env and never print near-cli output', () => {
     assert.ok(!/readFileSync\([^)]*\.env|process\.env\.(NEAR_AI|WORKER_FC|AGENT_FC|AGENT_MARKET)/.test(src), `${f} reads secrets`);
     assert.ok(!/console\.log\((r|out)\.std/.test(src), `${f} prints near-cli output`);
   }
+});
+
+// ---------- transient RPC handling ----------
+
+test('one or a few transient RPC errors never trip; five in a row do; a good pass resets', () => {
+  const t = (n) => ({ transient_error: 'RPC HTTP 429', consecutive: n });
+  assert.deepEqual(checkWorkerReports([t(1)]), []);
+  assert.deepEqual(checkWorkerReports([t(1), t(2), { delivered: [], finalized: [] }, t(1), t(2), t(3), t(4)]), []);
+  assert.match(checkWorkerReports([t(1), t(2), t(3), t(4), t(5)]).join('|'), /5 transient RPC errors in a row/);
+  const tf = { failed: [{ step: 'submit', reason: 'RPC HTTP 429', transient: true }] };
+  assert.deepEqual(checkWorkerReports([tf, tf, tf, tf]), [], 'transient submit failures are retried, not counted as repeats');
+});
+test('a fatal worker error trips', () => {
+  assert.match(checkWorkerReports([{ fatal: 'Smart contract panicked: x' }]).join('|'), /worker fatal error/);
+});
+test('near-cli transient errors are flagged; contract panics are not', () => {
+  assert.equal(parseCliOutput('Error: Too Many Requests 429').transient, true);
+  assert.equal(parseCliOutput('Error: ... Smart contract panicked: Job is not open').transient, false);
+});
+test('sendVerified: a retried create that already landed is not sent again', async () => {
+  const { sendVerified } = await import('./common.mjs');
+  let sends = 0;
+  const send = async () => { sends++; throw Object.assign(new Error('create_job_v2: near-cli transient RPC error'), { transient: true }); };
+  const r = await sendVerified('create_job_v2', send, async () => true, { wait: async () => {} });
+  assert.equal(r, 'landed-before-retry');
+  assert.equal(sends, 1);
+});
+test('sendVerified: resends only after verify says it did not land, and gives up after 4 tries', async () => {
+  const { sendVerified } = await import('./common.mjs');
+  let sends = 0;
+  const send = async () => { sends++; if (sends < 3) throw Object.assign(new Error('x'), { transient: true }); return 'TX'; };
+  assert.equal(await sendVerified('m', send, async () => false, { wait: async () => {} }), 'TX');
+  assert.equal(sends, 3);
+  let n = 0;
+  const always = async () => { n++; throw Object.assign(new Error('x'), { transient: true }); };
+  await assert.rejects(sendVerified('m', always, async () => false, { wait: async () => {} }));
+  assert.equal(n, 4);
+  const hard = async () => { throw new Error('Smart contract panicked'); };
+  await assert.rejects(sendVerified('m', hard, async () => false, { wait: async () => {} }), /panicked/);
 });

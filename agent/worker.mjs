@@ -17,6 +17,7 @@ import { loadPacks, requestCompletion } from './lib.mjs';
 import { loadBriefs } from './autopilot/briefs.mjs';
 import { DEFAULT_LIMITS, runOnce } from './autopilot/core.mjs';
 import { acquireLock } from './autopilot/state.mjs';
+import { backoffMs, isTransient, rpcUrls, signingProviders, viewFunction } from './rpc.mjs';
 
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 export const PATHS = {
@@ -27,28 +28,50 @@ export const PATHS = {
   stop: here('./STOP'),
 };
 
-/** Real chain adapter. Views go through RPC; the two writes are signed with the worker's function-call key. */
-export async function nearChain(env) {
-  const { teraToGas } = await import('near-api-js');
-  const { Account, JsonRpcProvider } = await import('near-api-js');
-  const { checkedKeyPair, RPC_URL } = await import('./signer.mjs');
+/**
+ * Real chain adapter. Views go through rpcRequest (backoff, jitter, failover across endpoints).
+ * The two writes are signed with the worker's function-call key and are never re-sent here:
+ * on a transient error the next write goes to the next endpoint, and runOnce re-reads the job
+ * before it sends anything again.
+ */
+export async function nearChain(env, { onRpcEvent } = {}) {
+  const { teraToGas, Account } = await import('near-api-js');
+  const { checkedKeyPair } = await import('./signer.mjs');
   for (const k of ['CONTRACT_ID', 'WORKER_ID', 'WORKER_FC_PRIVATE_KEY', 'WORKER_EXPECTED_PUBLIC_KEY']) {
     if (!env[k]) throw new Error(`${k} is not set`);
   }
   const keyPair = checkedKeyPair(env.WORKER_FC_PRIVATE_KEY, env.WORKER_EXPECTED_PUBLIC_KEY); // stops on mismatch, never prints the key
-  const provider = new JsonRpcProvider({ url: RPC_URL });
+  const urls = rpcUrls(env);
+  const stats = { rpc_retries: 0, rpc_switches: 0, write_rotations: 0 };
+  const onEvent = (e) => {
+    if (e.type === 'retry') stats.rpc_retries += 1;
+    if (e.type === 'switch') stats.rpc_switches += 1;
+    onRpcEvent?.(e);
+  };
+  const signers = await signingProviders(urls);
   // Pass the key string: near-api-js 7 wraps it in a KeyPairSigner (a raw KeyPair object cannot sign).
-  const account = new Account(env.WORKER_ID, provider, keyPair.toString());
+  const accountFor = (provider) => new Account(env.WORKER_ID, provider, keyPair.toString());
   const contractId = env.CONTRACT_ID;
-  const view = (method, args = {}) => provider.callFunction({ contractId, method, args });
+  const view = (method, args = {}) => viewFunction(contractId, method, args, { urls, onEvent });
   const call = async (methodName, args) => {
-    const out = await account.callFunctionRaw({ contractId, methodName, args, gas: teraToGas('30') });
-    const failure = out.status?.Failure;
-    if (failure) throw new Error(`${methodName} failed: ${JSON.stringify(failure).slice(0, 200)}`);
-    return out.transaction.hash;
+    try {
+      const out = await accountFor(signers.current.provider).callFunctionRaw({ contractId, methodName, args, gas: teraToGas('30') });
+      const failure = out.status?.Failure;
+      if (failure) throw new Error(`${methodName} failed: ${JSON.stringify(failure).slice(0, 200)}`);
+      return out.transaction.hash;
+    } catch (err) {
+      if (isTransient(err)) {
+        const r = signers.rotate();
+        stats.write_rotations += 1;
+        onEvent({ type: 'switch', from: r.from, to: r.to, write: true });
+        err.transient = true;
+      }
+      throw err;
+    }
   };
   return {
-    account,
+    account: accountFor(signers.current.provider),
+    stats,
     getAutopilot: () => view('get_autopilot'),
     getJobs: (from, limit) => view('get_jobs_v2', { from, limit }),
     getOpenJobs: (from, limit) => view('get_open_jobs_v2', { from, limit }),
@@ -85,15 +108,37 @@ export function limitsFrom(env) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Repeats runOnce until STOP, the --until time, or a signal. */
-export async function runLoop(ctx, { intervalMs = 60_000, untilMs = Infinity, now = Date.now, wait = sleep, onPass = () => {} } = {}) {
+/**
+ * Repeats runOnce until STOP, the --until time, or a signal. A pass that fails with a transient
+ * RPC error (429, 5xx, timeout, network) is logged and retried after backoff with jitter; the
+ * worker exits only after maxTransient consecutive failures, so the monitor can take over.
+ * Any other error ends the loop at once.
+ */
+export async function runLoop(ctx, {
+  intervalMs = 60_000, untilMs = Infinity, now = Date.now, wait = sleep, onPass = () => {}, maxTransient = 5, random = Math.random,
+} = {}) {
   let stop = false;
+  let transient = 0;
   const onSignal = () => { stop = true; };
   process.once('SIGINT', onSignal);
   process.once('SIGTERM', onSignal);
   try {
     while (!stop && now() < untilMs) {
-      const report = await runOnce({ ...ctx, now });
+      let report;
+      try {
+        report = await runOnce({ ...ctx, now });
+        transient = 0;
+      } catch (err) {
+        if (!isTransient(err)) {
+          onPass({ fatal: String(err.message).slice(0, 200) });
+          return { stopped: 'fatal error', error: String(err.message).slice(0, 200) };
+        }
+        transient += 1;
+        onPass({ transient_error: String(err.message).slice(0, 160), consecutive: transient });
+        if (transient >= maxTransient) return { stopped: `${transient} consecutive transient RPC errors` };
+        await wait(Math.min(intervalMs, backoffMs(transient, { baseMs: 2_000, capMs: 60_000, random })));
+        continue;
+      }
       onPass(report);
       if (report.stopped === 'STOP file present') return report;
       await wait(intervalMs);
@@ -135,8 +180,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       limits: limitsFrom(process.env),
       log: () => {},
     };
-    const print = (r) => console.log(`[${new Date().toISOString()}] ${JSON.stringify(r)}`);
+    const print = (r) => console.log(`[${new Date().toISOString()}] ${JSON.stringify({ ...r, rpc: { ...ctx.chain.stats } })}`);
     if (argv.includes('--once')) print(await runOnce(ctx));
+    // the loop result line is printed by print() too, so every stdout line stays parseable
     else {
       const until = flag('--until') ? Date.parse(flag('--until')) : Infinity;
       print(await runLoop(ctx, { intervalMs: Number(flag('--interval') ?? 60) * 1000, untilMs: until, onPass: print }));

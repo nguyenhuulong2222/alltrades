@@ -62,13 +62,25 @@ export function checkChain(base, now, seen, nowMs, { stuckMs = 120_000, minAllow
   return { trips, escrow };
 }
 
-/** Reads worker report lines. Trips on 3 NEAR AI failures in a row or any error repeating 3 times. */
-export function checkWorkerReports(reports, { maxConsecutiveAi = 3, maxRepeat = 3 } = {}) {
+/**
+ * Reads worker report lines. Trips on: 3 NEAR AI failures in a row; any non-transient error
+ * repeating 3 times; 5 transient RPC errors in a row (one 429 never trips); a fatal error.
+ */
+export function checkWorkerReports(reports, { maxConsecutiveAi = 3, maxRepeat = 3, maxConsecutiveTransient = 5 } = {}) {
   const trips = [];
   let consecutiveAi = 0;
+  let consecutiveTransient = 0;
   const counts = new Map();
   for (const r of reports) {
+    if (r.fatal) trips.push(`worker fatal error: ${r.fatal}`);
+    if (r.transient_error) {
+      consecutiveTransient = r.consecutive ?? consecutiveTransient + 1;
+      if (consecutiveTransient >= maxConsecutiveTransient) trips.push(`worker hit ${consecutiveTransient} transient RPC errors in a row`);
+      continue;
+    }
+    if ('delivered' in r || 'finalized' in r) consecutiveTransient = 0;
     for (const f of r.failed ?? []) {
+      if (f.transient) continue; // retried with backoff and failover; persistent cases trip above
       if (f.step === 'generate' && /NEAR AI/.test(f.reason)) continue; // covered by the consecutive rule
       const key = `${f.step}: ${f.reason}`;
       counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -79,7 +91,7 @@ export function checkWorkerReports(reports, { maxConsecutiveAi = 3, maxRepeat = 
     if (consecutiveAi >= maxConsecutiveAi) { trips.push(`NEAR AI failed ${consecutiveAi} times in a row`); break; }
   }
   for (const [k, n] of counts) if (n >= maxRepeat) trips.push(`repeated error x${n}: ${k}`);
-  return trips;
+  return [...new Set(trips)];
 }
 
 /** Parses "[ISO] {json}" lines written by agent/worker.mjs. Non-report lines are returned as crashes. */

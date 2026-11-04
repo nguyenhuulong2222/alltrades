@@ -5,21 +5,21 @@
 //   node scripts/view.mjs get_job '{"job_id":3}'
 //   node scripts/view.mjs --core-state            # owner, agent, max_job_cost, next_job_id, total_revenue, withdrawn
 //   node scripts/view.mjs --account worker-long2222.testnet   # balance and code hash of any account
-// Options: --contract <id> (default alltrades-long2222.testnet), --rpc <url>
+// Options: --contract <id> (default alltrades-long2222.testnet), --rpc <url> (tried first; defaults in agent/rpc.mjs)
+
+import { DEFAULT_RPCS, rpcRequest, rpcUrls } from '../agent/rpc.mjs';
 
 export const DEFAULT_CONTRACT = 'alltrades-long2222.testnet';
-export const DEFAULT_RPC = 'https://rpc.testnet.near.org';
+export const DEFAULT_RPC = DEFAULT_RPCS[0];
 
-export async function query(params, { rpc = DEFAULT_RPC, fetchImpl = fetch } = {}) {
-  const res = await fetchImpl(rpc, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 'view', method: 'query', params: { finality: 'final', ...params } }),
-    signal: AbortSignal.timeout(20_000),
-  });
-  const j = await res.json();
-  if (j.error || j.result?.error) throw new Error(`RPC error: ${JSON.stringify(j.error ?? j.result.error).slice(0, 200)}`);
-  return j.result;
+/** JSON-RPC query with backoff, jitter and failover (agent/rpc.mjs). --rpc puts one endpoint first. */
+export async function query(params, { rpc, fetchImpl = fetch, onEvent } = {}) {
+  const urls = rpc ? [rpc, ...DEFAULT_RPCS.filter((u) => u !== rpc)] : rpcUrls();
+  try {
+    return await rpcRequest('query', { finality: 'final', ...params }, { urls, fetchImpl, onEvent });
+  } catch (e) {
+    throw new Error(`RPC error: ${String(e.message).slice(0, 200)}`);
+  }
 }
 
 export async function view(method, args = {}, { contract = DEFAULT_CONTRACT, ...opts } = {}) {
@@ -56,7 +56,7 @@ export async function account(id, opts = {}) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const argv = process.argv.slice(2);
   const take = (name) => { const i = argv.indexOf(name); if (i < 0) return undefined; const v = argv[i + 1]; argv.splice(i, 2); return v; };
-  const opts = { contract: take('--contract') ?? DEFAULT_CONTRACT, rpc: take('--rpc') ?? DEFAULT_RPC };
+  const opts = { contract: take('--contract') ?? DEFAULT_CONTRACT, rpc: take('--rpc') };
   const acc = take('--account');
   try {
     let out;

@@ -56,7 +56,7 @@ You see each industry on the contract, with its budget, revenue, estimated cost,
 
 **2. Check that the agent has no full-access key.**
 ```bash
-curl -s https://rpc.testnet.near.org -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_access_key_list","finality":"final","account_id":"agent-long2222.testnet"}}'
+curl -s https://test.rpc.fastnear.com -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_access_key_list","finality":"final","account_id":"agent-long2222.testnet"}}'
 ```
 You see exactly one key, `ed25519:4UG4RCFqw2sSdXn7gAWLYXSkPjVH9NaiMpyK5nNuoQ4r`. It is a `FunctionCall` key limited to `submit_delivery` and `reallocate` on the contract. The original full-access key was deleted in [`H7B3B2G2…`](https://testnet.nearblocks.io/txns/H7B3B2G2zHG8xwEGapWW76DjsJwMJ8JLep7TQYjcSpyt).
 
@@ -89,6 +89,8 @@ cd contract && cargo test          # 154 tests: jobs v1 (16), Remit orders (66),
 **6. Add an industry.** Drop a JSON file into `packs/` (copy `packs/fitness.json`), then have the owner call `add_industry`. The agent picks it up on the next job. A pack with `risk` set to medical, legal, financial or tax is refused, as is one whose cost ceiling is at or above its price.
 
 ## Run it yourself
+
+**RPC.** Every script and both dashboard pages read testnet through `https://test.rpc.fastnear.com`, then fall back to `https://near-testnet.drpc.org` and `https://archival-rpc.testnet.fastnear.com` (see `agent/rpc.mjs`). Set `NEAR_RPC_URL` to put another endpoint first. On 2026-11-04 the old `rpc.testnet.near.org` started answering HTTP 429 "THIS ENDPOINT IS DEPRECATED", so it is no longer used. near-cli-rs 0.30's built-in `testnet` network already uses FastNEAR.
 
 Requirements: Node 20.6+ (for `--env-file`), Rust with `cargo-near` 0.22, `near-cli-rs` 0.30, a NEAR AI Cloud API key, and three testnet accounts (owner, agent, client).
 

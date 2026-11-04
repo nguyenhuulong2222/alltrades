@@ -36,10 +36,19 @@ test('Remit page: dry quote only, no storage, no wallet, testnet RPC', () => {
   assert.ok(!html.includes('deposit' + '/submit'));
   assert.ok(!/localStorage|sessionStorage|indexedDB|caches\.open|serviceWorker/.test(html), 'no persistent storage');
   assert.ok(!/wallet-selector|near-connect|signIn|requestSignIn/i.test(html), 'no wallet');
-  assert.match(html, /rpc\.testnet\.near\.org/);
+  assert.match(html, /test\.rpc\.fastnear\.com/);
+  assert.match(html, /near-testnet\.drpc\.org/);
   assert.ok(!/rpc\.mainnet|rpc\.near\.org['"]/.test(html), 'no mainnet RPC');
 });
 test('dashboard folder holds only public static files', () => {
   const files = readdirSync('dashboard', { recursive: true });
   for (const f of files) assert.ok(/\.(html|json)$/.test(f) || f === 'data', `unexpected file ${f}`);
+});
+test('dashboard pages fail over between testnet RPCs and never use the deprecated endpoint as a target', () => {
+  for (const f of ['dashboard/index.html', 'dashboard/remit.html']) {
+    const page = read(f);
+    assert.match(page, /async function rpcQuery/, f);
+    assert.match(page, /TRANSIENT = new Set\(\[408, 425, 429, 500, 502, 503, 504\]\)/, f);
+    assert.ok(!/fetch\(['"]https:\/\/rpc\.testnet\.near\.org/.test(page) && !page.includes("'https://rpc.testnet.near.org'"), f);
+  }
 });

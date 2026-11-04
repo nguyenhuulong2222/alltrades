@@ -12,10 +12,10 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { MockPayoutProvider } from './mock.mjs';
+import { rpcRequest } from '../rpc.mjs';
 
 export const CONTRACT_ID = 'alltrades-long2222.testnet';
 export const PAYOUT_ID = 'payout-long2222.testnet';
-export const RPC_URL = 'https://rpc.testnet.near.org';
 export const SETTLE_GAS = '30 Tgas'; // contract floor is 20 Tgas
 
 const YOCTO = 10n ** 24n;
@@ -24,19 +24,13 @@ const toNear = (yocto) => {
   return `${y / YOCTO}.${(y % YOCTO).toString().padStart(24, '0').replace(/0+$/, '') || '0'}`;
 };
 
-/** Read-only RPC view of one order. */
-export async function readOrderRpc(orderId, { fetchImpl = fetch, contractId = CONTRACT_ID } = {}) {
-  const res = await fetchImpl(RPC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'query', params: {
-      request_type: 'call_function', finality: 'final', account_id: contractId, method_name: 'get_order',
-      args_base64: Buffer.from(JSON.stringify({ order_id: orderId })).toString('base64') } }),
-    signal: AbortSignal.timeout(15_000),
-  });
-  const j = await res.json();
-  if (j.error || j.result?.error) throw new Error(`get_order failed: ${JSON.stringify(j.error ?? j.result.error).slice(0, 200)}`);
-  return JSON.parse(Buffer.from(j.result.result).toString() || 'null');
+/** Read-only RPC view of one order, with backoff and failover across testnet endpoints. */
+export async function readOrderRpc(orderId, { fetchImpl = fetch, contractId = CONTRACT_ID, urls } = {}) {
+  const r = await rpcRequest('query', {
+    request_type: 'call_function', finality: 'final', account_id: contractId, method_name: 'get_order',
+    args_base64: Buffer.from(JSON.stringify({ order_id: orderId })).toString('base64'),
+  }, { fetchImpl, ...(urls ? { urls } : {}) });
+  return JSON.parse(Buffer.from(r.result).toString() || 'null');
 }
 
 /** Signs settle_order with near-cli (keychain). Returns the transaction hash. */

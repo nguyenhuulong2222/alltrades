@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { loadBriefs } from '../../agent/autopilot/briefs.mjs';
 import { loadPacks } from '../../agent/lib.mjs';
 import { view } from '../view.mjs';
-import { CLIENT, OWNER, logger, nearCall, sleep } from './common.mjs';
+import { CLIENT, OWNER, logger, nearCall, sendVerified, sleep } from './common.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const DIR = `${root}backups/soak/`;
@@ -66,7 +66,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     while (Date.now() < due) { if (tripped()) process.exit(1); await sleep(Math.min(15_000, due - Date.now())); }
     if (tripped()) process.exit(1);
     const b = briefs.get(step.brief);
-    const create = () => nearCall({ method: 'create_job_v2', args: { industry: b.industry, brief_id: b.id, brief_hash: b.hash }, signer: CLIENT, deposit: step.deposit });
+    const job = (id) => view('get_job_v2', { job_id: id });
+    // A retried create must not open a second job: verify by next_job_id and the job's fields.
+    const create = async () => {
+      const before = Number((await view('get_autopilot')).next_job_id);
+      const tx = await sendVerified('create_job_v2',
+        () => nearCall({ method: 'create_job_v2', args: { industry: b.industry, brief_id: b.id, brief_hash: b.hash }, signer: CLIENT, deposit: step.deposit }),
+        async () => { const j = await job(before).catch(() => null); return j && j.client === CLIENT && j.brief_id === b.id; },
+        { log });
+      return { id: before, tx };
+    };
+    const write = (label, args, signer, landed) => sendVerified(label,
+      () => nearCall({ method: label, args, signer }),
+      async () => landed((await job(args.job_id)).status), { log });
 
     try {
       if (step.cancelDuringStop) {
@@ -77,16 +89,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         log('stop_drill_begin', { worker_pid: pid });
         const exited = await waitFor(async () => !alive(pid), 4 * MIN, 5_000);
         log('worker_stopped', { exited: Boolean(exited) });
-        const cfg = await view('get_autopilot');
-        const tx = await create();
-        const id = Number(cfg.next_job_id);
+        const { id, tx } = await create();
         log('job_created', { id, brief: b.id, deposit: step.deposit, tx, note: 'created while STOP is present' });
-        const ctx = await nearCall({ method: 'cancel_job_v2', args: { job_id: id }, signer: CLIENT });
+        const ctx = await write('cancel_job_v2', { job_id: id }, CLIENT, (st) => st === 'Cancelling' || st === 'Cancelled');
         log('cancel_sent', { id, tx: ctx });
-        const done = await waitFor(async () => (await view('get_job_v2', { job_id: id })).status === 'Cancelled', 2 * MIN, 10_000);
+        const done = await waitFor(async () => (await job(id)).status === 'Cancelled', 2 * MIN, 10_000);
         log('cancel_result', { id, cancelled: Boolean(done) });
         await waitFor(async () => Date.now() >= due + 5 * MIN, 6 * MIN, 10_000);
-        const j = await view('get_job_v2', { job_id: id });
+        const j = await job(id);
         log('stop_drill_end', { id, status: j.status, deliverable_hash: j.deliverable_hash });
         unlinkSync(STOP);
         const newPid = startWorker(workerUntil);
@@ -95,21 +105,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         continue;
       }
 
-      const cfg = await view('get_autopilot');
-      const tx = await create();
-      const id = Number(cfg.next_job_id);
+      const { id, tx } = await create();
       log('job_created', { id, brief: b.id, deposit: step.deposit, tx });
 
       if (step.dispute) {
         const delivered = await waitFor(async () => {
-          const j = await view('get_job_v2', { job_id: id });
+          const j = await job(id);
           return j.status === 'Delivered' ? j : null;
         }, 8 * MIN);
         if (!delivered) { log('dispute_skipped', { id, reason: 'not delivered within 8 minutes' }); continue; }
-        const dtx = await nearCall({ method: 'dispute_job_v2', args: { job_id: id }, signer: CLIENT });
+        const dtx = await write('dispute_job_v2', { job_id: id }, CLIENT, (st) => st === 'Disputed' || st === 'Paid');
         log('dispute_sent', { id, tx: dtx });
-        const rtx = await nearCall({ method: 'resolve_dispute_v2', args: { job_id: id, refund: false }, signer: OWNER });
-        const j = await view('get_job_v2', { job_id: id });
+        const rtx = await write('resolve_dispute_v2', { job_id: id, refund: false }, OWNER, (st) => st === 'Paid');
+        const j = await job(id);
         log('dispute_resolved', { id, tx: rtx, ruling: 'worker wins', status: j.status });
       }
     } catch (e) {

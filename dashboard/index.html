@@ -88,7 +88,6 @@
 (() => {
   const params = new URLSearchParams(location.search);
   const CONTRACT = 'alltrades-long2222.testnet';
-  const RPC = params.get('rpc') || 'https://rpc.testnet.near.org';
   const TIMEOUT_MS = 15000;
   const YOCTO_PER_MILLI = 10n ** 21n;
 
@@ -106,21 +105,38 @@
     return node;
   };
 
-  async function viewCall(method, args = {}) {
-    const body = {
-      jsonrpc: '2.0', id: 'dashboard', method: 'query',
-      params: { request_type: 'call_function', finality: 'final', account_id: CONTRACT, method_name: method,
-        args_base64: btoa(JSON.stringify(args)) },
-    };
-    let res;
-    try {
-      res = await fetch(RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body), signal: AbortSignal.timeout(TIMEOUT_MS) });
-    } catch (e) {
-      throw new Error(e.name === 'TimeoutError' ? `RPC did not answer within ${TIMEOUT_MS / 1000}s` : 'Could not reach the RPC endpoint');
+  // Testnet RPCs, tried in order. rpc.testnet.near.org is deprecated (HTTP 429) and not used.
+  // ?rpc=<url> puts one endpoint first.
+  const DEFAULT_RPCS = ['https://test.rpc.fastnear.com', 'https://near-testnet.drpc.org', 'https://archival-rpc.testnet.fastnear.com'];
+  const RPCS = params.get('rpc') ? [params.get('rpc'), ...DEFAULT_RPCS.filter((u) => u !== params.get('rpc'))] : DEFAULT_RPCS;
+  const TRANSIENT = new Set([408, 425, 429, 500, 502, 503, 504]);
+  let rpcIndex = 0;
+
+  /** One JSON-RPC call with failover: on 429/5xx/timeout/network errors, try the next endpoint. */
+  async function rpcQuery(params) {
+    let last = 'no endpoint answered';
+    for (let n = 0; n < RPCS.length; n++) {
+      const url = RPCS[(rpcIndex + n) % RPCS.length];
+      try {
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS),
+          body: JSON.stringify({ jsonrpc: '2.0', id: 'dashboard', method: 'query', params }) });
+        if (TRANSIENT.has(res.status)) { last = `HTTP ${res.status}`; continue; }
+        if (!res.ok) throw new Error(`RPC returned HTTP ${res.status}`);
+        const json = await res.json();
+        if (json.error?.code === -429) { last = 'rate limited'; continue; }
+        rpcIndex = (rpcIndex + n) % RPCS.length; // stick with the endpoint that answered
+        return json;
+      } catch (e) {
+        if (e.name === 'TimeoutError' || e.name === 'AbortError' || e instanceof TypeError) { last = e.name === 'TimeoutError' ? `timeout after ${TIMEOUT_MS / 1000}s` : 'network error'; continue; }
+        throw e;
+      }
     }
-    if (!res.ok) throw new Error(`RPC returned HTTP ${res.status}`);
-    const json = await res.json();
+    throw new Error(`No testnet RPC answered (${last})`);
+  }
+
+  async function viewCall(method, args = {}) {
+    const json = await rpcQuery({ request_type: 'call_function', finality: 'final', account_id: CONTRACT, method_name: method,
+      args_base64: btoa(JSON.stringify(args)) });
     if (json.error) throw new Error(`RPC error: ${json.error.cause?.name || json.error.name || 'unknown'}`);
     if (json.result?.error) throw new Error(`Contract view failed: ${String(json.result.error).slice(0, 120)}`);
     return JSON.parse(new TextDecoder().decode(new Uint8Array(json.result.result)));

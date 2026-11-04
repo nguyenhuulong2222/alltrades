@@ -245,7 +245,8 @@ test('a job the client cancelled meanwhile is closed, not retried', async () => 
   const id = h.chain.add('lani-nails-fall');
   h.ai.text = () => { h.chain.jobs.get(id).status = 'Cancelled'; return GOOD; };
   const r = await h.run();
-  assert.match(r.failed[0].reason, /Job is not open/);
+  assert.deepEqual(r.skipped, [{ id, reason: 'job is Cancelled on chain; nothing sent' }]);
+  assert.deepEqual(h.chain.calls.submit, [], 'the re-read before sending caught the cancel');
   assert.equal(h.state().jobs[id].status, 'closed');
   await h.run();
   assert.equal(h.ai.calls, 1);
@@ -346,4 +347,32 @@ test('filler text for gas measurement has the exact byte size and a clear label'
   const { fillerText } = await import('../scripts/measure-delivery-gas.mjs');
   for (const n of [100, 4090, 4096]) assert.equal(Buffer.byteLength(fillerText(n)), n);
   assert.match(fillerText(200), /^GAS MEASUREMENT FILLER, not a deliverable/);
+});
+test('transient submit error: no attempt used, text reused, re-read before resending, no duplicate', async () => {
+  const h = harness({ limits: { maxAttempts: 1 } });
+  const id = h.chain.add('lani-nails-fall');
+  const real = h.chain.submitDelivery;
+  h.chain.submitDelivery = async () => { throw Object.assign(new Error('RPC HTTP 429'), { transient: true }); };
+  const r1 = await h.run();
+  assert.equal(r1.failed[0].transient, true);
+  assert.equal(h.state().jobs[id].attempts, 1, 'only the model call counted; the transient send did not add one');
+  assert.equal(h.state().jobs[id].pending_text, GOOD);
+  h.chain.submitDelivery = real;
+  const r2 = await h.run(); // maxAttempts is 1 and already used: the saved text still goes out
+  assert.deepEqual(r2.delivered, [id]);
+  assert.equal(h.ai.calls, 1, 'the model was not called again');
+  assert.equal(h.chain.calls.submit.length, 1, 'only one real send');
+  assert.equal(h.state().jobs[id].pending_text, undefined);
+});
+test('transient submit error after the tx landed: the re-read finds it Delivered and sends nothing', async () => {
+  const h = harness();
+  const id = h.chain.add('lani-nails-fall');
+  const real = h.chain.submitDelivery;
+  h.chain.submitDelivery = async (args) => { await real(args); throw Object.assign(new Error('timeout'), { name: 'TimeoutError' }); };
+  await h.run();
+  h.chain.submitDelivery = real;
+  const r2 = await h.run();
+  assert.deepEqual(r2.recovered, [{ id, status: 'delivered' }]);
+  assert.equal(h.chain.calls.submit.length, 1, 'never sent twice');
+  assert.equal(h.ai.calls, 1);
 });

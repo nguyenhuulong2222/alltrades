@@ -8,6 +8,7 @@ import { execFile } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { account, coreState, query, view } from '../view.mjs';
+import { backoffMs } from '../../agent/rpc.mjs';
 
 export const CONTRACT = 'alltrades-long2222.testnet';
 export const OWNER = 'owner-long2222.testnet';
@@ -28,9 +29,11 @@ export function callArgs({ method, args, signer, deposit = '0 NEAR', gas = '30 T
 export function parseCliOutput(text) {
   const clean = String(text).replace(/\x1b\[[0-9;]*m/g, '');
   const tx = clean.match(/Transaction ID:\s*([1-9A-HJ-NP-Za-km-z]{43,44})/)?.[1] ?? null;
-  const err = clean.match(/Smart contract panicked: ([^"\n)]{1,160})/)?.[1]
-    ?? (/(^|\n)\s*(Error|error):/.test(clean) && !tx ? 'near-cli error (details withheld)' : null);
-  return { tx, error: err };
+  const panic = clean.match(/Smart contract panicked: ([^"\n)]{1,160})/)?.[1];
+  const failed = /(^|\n)\s*(Error|error):/.test(clean) && !tx;
+  const transient = !panic && failed && /\b(429|408|50[0234])\b|too many requests|rate.?limit|timed? ?out|timeout|connection|bad gateway|unavailable|deprecated/i.test(clean);
+  const err = panic ?? (transient ? 'near-cli transient RPC error' : failed ? 'near-cli error (details withheld)' : null);
+  return { tx, error: err, transient };
 }
 
 export async function nearCall(opts, run = promisify(execFile)) {
@@ -41,9 +44,27 @@ export async function nearCall(opts, run = promisify(execFile)) {
   } catch (e) {
     out = `${e.stdout ?? ''}\n${e.stderr ?? ''}\nerror:`;
   }
-  const { tx, error } = parseCliOutput(out);
-  if (error || !tx) throw new Error(`${opts.method}: ${error ?? 'no transaction ID'}`);
+  const { tx, error, transient } = parseCliOutput(out);
+  if (error || !tx) throw Object.assign(new Error(`${opts.method}: ${error ?? 'no transaction ID'}`), { transient: Boolean(transient) });
   return tx;
+}
+
+/**
+ * Sends a write; on a transient error waits (backoff + jitter), then asks verify() whether the
+ * earlier send landed anyway. Only if it did not, the write is sent again. Never sends blindly twice.
+ */
+export async function sendVerified(label, send, verify, { log = () => {}, tries = 4, wait = sleep, random = Math.random } = {}) {
+  for (let i = 0; ; i++) {
+    try {
+      return await send();
+    } catch (e) {
+      if (!e.transient || i + 1 >= tries) throw e;
+      log('rpc_retry', { label, attempt: i + 1, error: e.message.slice(0, 120) });
+      await wait(backoffMs(i + 1, { baseMs: 2_000, capMs: 30_000, random }));
+      const landed = await verify();
+      if (landed) { log('verified_after_error', { label }); return 'landed-before-retry'; }
+    }
+  }
 }
 
 export async function allowance(accountId = WORKER, publicKey = WORKER_KEY) {
