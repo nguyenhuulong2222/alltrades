@@ -10,7 +10,7 @@
 export const DEFAULT_CONTRACT = 'alltrades-long2222.testnet';
 export const DEFAULT_RPC = 'https://rpc.testnet.near.org';
 
-async function query(params, { rpc = DEFAULT_RPC, fetchImpl = fetch } = {}) {
+export async function query(params, { rpc = DEFAULT_RPC, fetchImpl = fetch } = {}) {
   const res = await fetchImpl(rpc, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
