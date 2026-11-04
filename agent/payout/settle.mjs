@@ -1,7 +1,7 @@
 // Payout account script (simulated): deliver off-chain with the MOCK provider first,
 // and only if that reports "delivered", sign settle_order as the payout account.
 //
-//   node agent/payout/settle.mjs <order_id>
+//   node agent/payout/settle.mjs <order_id> [--contract <CONTRACT_ID>] [--payout <PAYOUT_ID>]
 //
 // - Only providers that describe themselves as simulated are accepted. There is no path
 //   to a real payout partner.
@@ -57,9 +57,10 @@ export async function settleWithNearCli(orderId, { contractId = CONTRACT_ID, pay
  */
 export async function deliverThenSettle(orderId, {
   provider = new MockPayoutProvider(),
-  readOrder = readOrderRpc,
-  settle = settleWithNearCli,
+  contractId = CONTRACT_ID,
   payoutId = PAYOUT_ID,
+  readOrder = (id) => readOrderRpc(id, { contractId }),
+  settle = (id) => settleWithNearCli(id, { contractId, payoutId }),
   now = Date.now(),
 } = {}) {
   const steps = [];
@@ -91,9 +92,16 @@ export async function deliverThenSettle(orderId, {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const id = Number(process.argv[2]);
-  if (!Number.isInteger(id) || id < 0) { console.error('Usage: node agent/payout/settle.mjs <order_id>'); process.exit(2); }
-  const out = await deliverThenSettle(id);
+  const argv = process.argv.slice(2);
+  const flag = (name, fallback) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : fallback; };
+  const id = Number(argv[0]);
+  const contractId = flag('--contract', CONTRACT_ID);
+  const payoutId = flag('--payout', PAYOUT_ID);
+  if (!Number.isInteger(id) || id < 0 || !contractId || !payoutId) {
+    console.error('Usage: node agent/payout/settle.mjs <order_id> [--contract <CONTRACT_ID>] [--payout <PAYOUT_ID>]');
+    process.exit(2);
+  }
+  const out = await deliverThenSettle(id, { contractId, payoutId });
   console.log(JSON.stringify(out, null, 2));
   if (out.ok) console.log(`https://testnet.nearblocks.io/txns/${out.tx}`);
   process.exit(out.ok ? 0 : 1);
