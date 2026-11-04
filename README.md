@@ -36,16 +36,16 @@ Every job so far was paid by our own test client, and an operator starts each ag
 
 Remit follows the same pattern: the agent only drafts, a person signs `create_order`, and the payout script is started by hand for each order.
 
-**Jobs v2 autopilot: deployed on testnet, one supervised cycle verified, no continuous run yet.** On branch `feature/autopilot` there is a contract extension and a background worker meant to make every step above automatic except payment by a real customer (see [Jobs v2 autopilot](#jobs-v2-autopilot-testnet-one-cycle)). On 2026-11-04 the worker, started by hand with `--once`, did the following on testnet: it delivered a job and later finalized it, and it stopped on `agent/STOP` and on the contract pause. A client dispute was refunded by the owner. The log is in [`docs/autopilot-checks.md`](docs/autopilot-checks.md). The worker has not yet run unattended in `--loop` mode. Until it does, the table above remains the state of the live system.
+**Jobs v2 autopilot: deployed on testnet and run unattended for 3 hours.** On branch `feature/autopilot` there is a contract extension and a background worker meant to make every step above automatic except payment by a real customer (see [Jobs v2 autopilot](#jobs-v2-autopilot-testnet-one-cycle)). On 2026-11-04 the worker, started by hand with `--once`, did the following on testnet: it delivered a job and later finalized it, and it stopped on `agent/STOP` and on the contract pause. A client dispute was refunded by the owner. On the same day a 3-hour unattended `--loop` soak run delivered and paid 7/7 jobs, handled a dispute and a cancel, and survived a `agent/STOP` drill. The log is in [`docs/autopilot-checks.md`](docs/autopilot-checks.md). The table above describes the v1 flow; the table below describes v2. In both, **the clients are simulated** (our own test account), **the worker does not find work on any external market**, and **the owner as dispute arbiter is acceptable for a demo only**.
 
-| Step | Jobs v2 (code, tests, one testnet cycle) |
+| Step | Jobs v2 on testnet (3-hour unattended run, 2026-11-04) |
 |---|---|
-| Find work | The worker reads `get_open_jobs_v2` in a loop. |
+| Find work | **Yes, on our own contract only.** The worker polls `get_open_jobs_v2` every 60 s. Jobs come from a simulated client; there is no external marketplace. |
 | Bid | Out of scope. There is no bidding, and NEAR AI Agent Market is out of scope before 2026-11-14. |
-| Do the work | Only for jobs whose `brief_id` and `brief_hash` match a fictional brief in `briefs/`. |
-| Deliver | `submit_delivery_v2`. The contract checks the text against its hash, accepts at most 4096 bytes, and allows at most 10 deliveries per day. |
-| Get paid | After the review window, anyone can call `finalize_job_v2`, and the worker does. Clients are still our own test account. |
-| Keep the books | Same industries and `total_revenue` as v1. |
+| Do the work | **Yes.** Only for jobs whose `brief_id` and `brief_hash` match a fictional brief in `briefs/`. 7/7 jobs passed the quality gate in the run. |
+| Deliver | **Yes.** `submit_delivery_v2`, signed by the worker's function-call key. The contract checks the text against its hash, accepts at most 4096 bytes, and allows at most 10 deliveries per day. |
+| Get paid | **Yes, from simulated clients.** After the review window the worker calls `finalize_job_v2`, and the escrow becomes revenue. A disputed job is decided by the owner, which is acceptable for a demo only. No real customer has paid. |
+| Keep the books | **Yes.** Same industries and `total_revenue` as v1. After the run, revenue and contract balance reconciled exactly with the jobs. |
 
 ## Do X, see Y
 
@@ -169,7 +169,7 @@ Before sending anything, the agent derives the public key from `AGENT_FC_PRIVATE
 
 ## Jobs v2 autopilot (testnet, one cycle)
 
-> **Status: deployed to testnet on 2026-11-04 (code hash `9RukY7tq…RWzV`).** One supervised cycle is logged in [`docs/autopilot-checks.md`](docs/autopilot-checks.md): deliver, finalize, dispute with refund, and both stop drills. No unattended `--loop` run has been done yet. Autopilot is left **paused**.
+> **Status: deployed to testnet on 2026-11-04 (code hash `9RukY7tq…RWzV`).** [`docs/autopilot-checks.md`](docs/autopilot-checks.md) logs two things: a supervised cycle (deliver, finalize, dispute with refund, stop drills) and a **3-hour unattended soak run** (7/7 jobs delivered and paid, a dispute ruled for the worker, a cancel before delivery, an `agent/STOP` drill, with revenue, escrow and balances reconciled exactly). A first soak attempt tripped after 4 minutes because the old public RPC was deprecated; the monitor paused autopilot as designed, and the RPC failover fix followed. **Clients are simulated, there is no external marketplace, and the owner arbitrates disputes, which is acceptable for a demo only.** Autopilot is left **paused**.
 
 The goal is that people only set limits. The owner configures the worker account, the review window, a minimum job price, a daily delivery limit (at most 10), and a pause switch. After that:
 
