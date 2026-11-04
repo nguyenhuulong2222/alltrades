@@ -330,3 +330,20 @@ test('nearChain builds a signing account from the worker key and refuses a misma
   await assert.rejects(nearChain({ ...env, WORKER_EXPECTED_PUBLIC_KEY: other }), (e) => /key mismatch/.test(e.message) && !e.message.includes(kp.toString()));
   await assert.rejects(nearChain({ ...env, WORKER_FC_PRIVATE_KEY: '' }), /WORKER_FC_PRIVATE_KEY is not set/);
 });
+test('a successful retry clears the previous error from state', async () => {
+  const h = harness();
+  const id = h.chain.add('lani-nails-fall');
+  const real = h.chain.submitDelivery;
+  h.chain.submitDelivery = async () => { throw new Error('signer.signTransaction is not a function'); };
+  await h.run();
+  assert.equal(h.state().jobs[id].last_error, 'signer.signTransaction is not a function');
+  h.chain.submitDelivery = real;
+  await h.run();
+  assert.equal(h.state().jobs[id].status, 'delivered');
+  assert.equal(h.state().jobs[id].last_error, undefined);
+});
+test('filler text for gas measurement has the exact byte size and a clear label', async () => {
+  const { fillerText } = await import('../scripts/measure-delivery-gas.mjs');
+  for (const n of [100, 4090, 4096]) assert.equal(Buffer.byteLength(fillerText(n)), n);
+  assert.match(fillerText(200), /^GAS MEASUREMENT FILLER, not a deliverable/);
+});

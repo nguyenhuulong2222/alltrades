@@ -46,6 +46,7 @@ export async function runOnce({ chain, generate, briefs, packs, statePath, stopP
       try {
         e.finalize_tx = await chain.finalize(job.id);
         e.status = 'finalized';
+        delete e.last_error;
         report.finalized.push(job.id);
       } catch (err) {
         e.last_error = short(err);
@@ -129,6 +130,7 @@ export async function runOnce({ chain, generate, briefs, packs, statePath, stopP
       e.submit_tx = await chain.submitDelivery({ jobId: job.id, hash, cost: toYocto(pack.max_cost_near), text });
       const after = await chain.getJob(job.id);
       Object.assign(e, { status: 'delivered', deliverable_hash: hash, review_deadline_ns: after?.review_deadline_ns ?? null });
+      delete e.last_error;
       report.delivered.push(job.id);
     } catch (err) {
       const msg = short(err);
