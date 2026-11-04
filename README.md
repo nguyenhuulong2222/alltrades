@@ -94,6 +94,39 @@ near call <CONTRACT_ID> approve_job '{"job_id":<JOB_ID>}' --useAccount <CLIENT_I
 # 6. Dashboard: change CONTRACT in dashboard/index.html and serve the folder as static files
 ```
 
+**Remit (simulated, testnet only).** These steps continue from the contract above and need a fourth testnet account for the simulated payout partner. They need no `.env`: the Remit agent holds no key, and both signatures below come from your near-cli keychain.
+
+```bash
+# 7. Create the simulated payout account (testnet faucet)
+near account create-account sponsor-by-faucet-service <PAYOUT_ID> autogenerate-new-keypair save-to-keychain network-config testnet create
+
+# 8. Owner sets the payout account and a per-order cap (0.5 NEAR here; the minimum order is 0.01 NEAR)
+near contract call-function as-transaction <CONTRACT_ID> set_remit_config \
+  json-args '{"payout":"<PAYOUT_ID>","max_order_amount":"500000000000000000000000"}' \
+  prepaid-gas '30 Tgas' attached-deposit '0 NEAR' sign-as <OWNER_ID> network-config testnet sign-with-keychain send
+
+# 9. The agent turns a Vietnamese request into a draft. It prints recipient_hash, the deposit and a
+#    ready-made create_order command. Drop --fixtures to use a live 1Click dry quote and a live reference rate.
+node agent/remit.mjs --fixtures --contract <CONTRACT_ID> "Gửi 500 đô về cho mẹ"
+
+# 10. The sender checks the draft and signs create_order: paste the printed sign_command,
+#     replacing <SENDER_ACCOUNT> with <CLIENT_ID>. It looks like this:
+near contract call-function as-transaction <CONTRACT_ID> create_order \
+  json-args '{"recipient_hash":"<HASH_FROM_DRAFT>","ttl_secs":3600}' \
+  prepaid-gas '30 Tgas' attached-deposit '0.05 NEAR' sign-as <CLIENT_ID> network-config testnet sign-with-keychain send
+near contract call-function as-read-only <CONTRACT_ID> get_remit_config json-args '{}' network-config testnet now   # order id = next_order_id - 1
+
+# 11. The payout account "delivers" with the mock provider, then signs settle_order (30 Tgas)
+node agent/payout/settle.mjs <ORDER_ID> --contract <CONTRACT_ID> --payout <PAYOUT_ID>
+near contract call-function as-read-only <CONTRACT_ID> get_order json-args '{"order_id":<ORDER_ID>}' network-config testnet now   # "status": "Settled"
+
+# 12. Remit dashboard: change CONTRACT in dashboard/remit.html, replace dashboard/data/remit-txs.json
+#     with your own tx hashes (or {"orders":{}}), then serve the folder
+cd dashboard && python3 -m http.server 8787   # open http://127.0.0.1:8787/remit.html
+```
+
+To see a refund instead, create an order with `"ttl_secs":60`, wait until the deadline passes, then have the sender call `refund_order` with `'{"order_id":<ORDER_ID>}'` and at least 20 Tgas.
+
 Before sending anything, the agent derives the public key from `AGENT_FC_PRIVATE_KEY`. If it does not match the expected function-call key, the agent stops. Error messages never include the key.
 
 ## Safety design
