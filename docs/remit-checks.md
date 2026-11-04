@@ -1,0 +1,68 @@
+# Remit — pre-build checks
+
+Checked 2026-11-04 (UTC). This is a simulated testnet demo: no real money and no real VND.
+
+## 1. Hackathon rules
+
+Source: https://nearhackathon.com/HACKATHON.md (read 2026-11-04)
+
+- **Track id for Real-World Money: `realworld`.** "Build payroll, invoicing, remittances, merchant payments and stablecoin rails for real businesses." Hints: stablecoins, NEAR Intents, meta transactions.
+- **Submission rules:**
+  - Each project submits once. A repository can be submitted only once. Submissions cannot be edited.
+  - The submission can list several tracks.
+  - The window runs 2026-11-01T00:00Z to 2026-11-14T23:59Z.
+  - The repository must be public by then. A demo post on X is required (video, or screenshots).
+- **Existing projects:**
+  - Q-001: code written from the announcement on 2026-10-19 counts. Earlier commits are baseline.
+  - Q-003 and Q-004: an old project as-is is not eligible. A new feature built in the window is eligible if it is kept separate, either on a dedicated branch or by tagging `pre-hackathon` and `hackathon-submission`, with a README section that links the diff.
+  - AllTrades' first commit is 2026-11-02, so the whole repo falls inside the window. Remit is built on the `feature/remit` branch.
+- **Intents:**
+  - Q-006: a 1Click JWT is not required.
+  - Q-007: there is no Intents testnet. Use mainnet with dev accounts and tiny amounts, or `dry: true` quotes.
+  - Q-010 and Q-011: testnet-only projects are eligible for every track. A project's own contract that fits the track is enough.
+
+## 2. NEAR Intents 1Click — dry quote
+
+Sources:
+- https://docs.near-intents.org/integration/distribution-channels/1click-api/authentication.md
+- https://docs.near-intents.org/api-reference/oneclick/request-a-swap-quote.md
+- https://docs.near-intents.org/security-compliance/terms-of-service.md
+
+- **A JWT is not required.** Two `POST https://1click.chaindefuser.com/v0/quote` calls with `"dry": true` and no `X-API-Key` both returned **HTTP 201**. Neither response contained a `depositAddress`, so nothing could be deposited.
+  - 10 USDC → USDT, both on NEAR (`EXACT_INPUT`, slippage 100 bps).
+  - 1 wNEAR → USDC on NEAR.
+- **Response fields:**
+  - `quote` contains: `amountIn`, `amountInFormatted`, `amountInUsd`, `minAmountIn`, `amountOut`, `amountOutFormatted`, `amountOutUsd`, `minAmountOut`, `timeEstimate`, `refundFee`, `withdrawFee`.
+  - The top level also has `quoteRequest`, `signature`, `timestamp` and `correlationId`.
+- **Required request fields:** `dry`, `swapType`, `slippageTolerance`, `originAsset`, `depositType`, `destinationAsset`, `amount`, `refundTo`, `refundType`, `recipient`, `recipientType`, `deadline`.
+  - We used the all-zero implicit account as recipient and refundTo, so no real person's address was involved.
+- **Fee without a JWT:** the docs say an extra **0.25%** on non-`ANY_INPUT` quotes. HACKATHON.md Q-006 says 0.2%. The two sources disagree; treat the Intents docs as current.
+- **Not done:** no token was sent, `/v0/deposit/submit` was not called, and no swap was executed.
+- **Terms to respect:**
+  - §(e): API data may not be cached or stored for more than 24 hours, except for transaction history. We therefore keep no quote amounts in this repo.
+  - §(f) and §(g): developers must run KYC/AML and sanctions screening on their end users. A real remittance product would need this. The demo has no real users.
+  - The service says it is not a money transmitter or payment service provider.
+- **No VND:** 1Click quotes crypto assets only (USDC, USDT, wNEAR and others). It does not quote fiat VND.
+
+## 3. USD → VND comparison data
+
+No scraping was done. Each source below was checked for a public API and for terms of use.
+
+| Source | Access | Terms | Usable for the demo? |
+|---|---|---|---|
+| World Bank, Remittance Prices Worldwide | Excel download, plus an API via DataBank | CC BY 4.0. Attribution text: "The World Bank, Remittance Prices Worldwide, available at http://remittanceprices.worldbank.org". Do not imply endorsement. | **Yes, recommended.** It is quarterly and runs through Q3 2025, so it is a reference cost for the corridor, not a live price. |
+| ExchangeRate-API open access (`open.er-api.com/v6/latest/USD`) | Public, no key. Returned HTTP 200 with a VND rate. | Pages that show the rates must carry the attribution "Rates By Exchange Rate API". Updated once a day. Caching is allowed. Redistribution is not. Rate-limited per IP. | **Yes, for a mid-market reference rate.** Show the attribution and do not commit the raw data. |
+| Wise Comparison API (`api.wise.com/v4/comparisons`) | One unauthenticated GET returned 200 with 6 providers. | The docs say "All requests to the Comparison API require authentication" and that the data "must not be used for critical flows". | **No.** It would need Wise's approval. The response was not kept. |
+
+Sources:
+- https://datacatalog.worldbank.org/search/dataset/0037898/remittance-prices-worldwide
+- https://remittanceprices.worldbank.org (its dataset terms page returned 403 to our fetch, so we have not read it)
+- https://www.exchangerate-api.com/docs/free and https://www.exchangerate-api.com/terms
+- https://docs.wise.com/api-reference/comparison
+
+## 4. What this means for the build
+
+- The contract holds testnet NEAR in a `TransferOrder`. A simulated payout account settles it, or the sender takes a refund after the deadline.
+- No real VND moves. The payout partner is simulated.
+- Off-chain, a dry 1Click quote can show what the stablecoin leg would cost. The World Bank figure for the corridor and an attributed mid-market rate can give context.
+- Recipient details stay off-chain. Only a salted SHA-256 hash is stored.
