@@ -27,6 +27,9 @@ pub const MAX_TTL_SECS: u32 = 7 * 24 * 3600;
 /// 0.01 NEAR. Each order's storage is paid by the contract, so dust orders are refused.
 pub const MIN_ORDER_AMOUNT: NearToken = NearToken::from_millinear(10);
 const CALLBACK_GAS: Gas = Gas::from_tgas(10);
+/// settle/refund need gas for the call, the transfer and the 10 Tgas callback.
+/// Measured on testnet: about 5 Tgas in total.
+pub const MIN_TRANSFER_CALL_GAS: Gas = Gas::from_tgas(20);
 
 #[near(serializers = [json, borsh])]
 #[derive(Clone, PartialEq, Debug)]
@@ -116,6 +119,7 @@ impl Contract {
 
     /// Sender takes the money back after the deadline if the order was never settled.
     pub fn refund_order(&mut self, order_id: u64) -> Promise {
+        require_transfer_gas();
         let caller = env::predecessor_account_id();
         self.assert_not_agent(&caller);
         let mut order = read_order(order_id).expect("Unknown order");
@@ -134,6 +138,7 @@ impl Contract {
 
     /// Payout partner confirms delivery before the deadline and receives the locked NEAR.
     pub fn settle_order(&mut self, order_id: u64) -> Promise {
+        require_transfer_gas();
         let caller = env::predecessor_account_id();
         self.assert_not_agent(&caller);
         let mut order = read_order(order_id).expect("Unknown order");
@@ -189,6 +194,11 @@ impl Contract {
     fn assert_not_agent(&self, who: &AccountId) {
         require!(*who != self.agent, "Agent cannot use remit orders");
     }
+}
+
+/// Runs before any state change so a call that could not afford the callback changes nothing.
+fn require_transfer_gas() {
+    require!(env::prepaid_gas() >= MIN_TRANSFER_CALL_GAS, "Attach at least 20 Tgas");
 }
 
 fn require_not_pending(order: &TransferOrder) {

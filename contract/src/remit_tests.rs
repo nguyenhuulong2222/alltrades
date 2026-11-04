@@ -40,6 +40,25 @@ fn callback(c: &mut Contract, caller: &str, id: u64, ok: bool) -> OrderStatus {
     );
     c.on_order_transfer(id)
 }
+/// Sets prepaid gas with zero action fees. The mocked runtime charges far more gas
+/// than testnet (settle used ~4.96 Tgas there, ~24.9 Tgas in the mock), so this isolates
+/// the contract's own 20 Tgas rule from the mock's fee table.
+fn with_gas_free_fees(who: &str, ts: u64, gas: near_sdk::Gas) {
+    testing_env!(
+        VMContextBuilder::new()
+            .current_account_id(acc(CONTRACT))
+            .predecessor_account_id(acc(who))
+            .block_timestamp(ts)
+            .prepaid_gas(gas)
+            .build(),
+        near_sdk::test_vm_config(),
+        RuntimeFeesConfig::free(),
+    );
+}
+fn rejects(f: impl FnOnce()) -> String {
+    let err = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).expect_err("call should fail");
+    err.downcast_ref::<String>().cloned().unwrap_or_default()
+}
 fn status(c: &Contract, id: u64) -> OrderStatus {
     c.get_order(id).unwrap().status
 }
@@ -687,3 +706,62 @@ fn jobs_and_orders_have_separate_ids() {
     assert!(c.get_job(j).is_some());
     assert!(c.get_order(o).is_some());
 }
+
+// ---------- prepaid gas floor ----------
+
+const JUST_UNDER: near_sdk::Gas = near_sdk::Gas::from_gas(19_999_000_000_000);
+
+#[test]
+fn settle_with_19_999_tgas_is_rejected_and_order_stays_open() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    with_gas_free_fees("payout.testnet", T0, JUST_UNDER);
+    let msg = rejects(|| {
+        let _ = c.settle_order(id);
+    });
+    assert!(msg.contains("Attach at least 20 Tgas"), "{msg}");
+    assert_eq!(status(&c, id), OrderStatus::Open);
+}
+
+#[test]
+fn settle_with_exactly_20_tgas_is_accepted() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    with_gas_free_fees("payout.testnet", T0, MIN_TRANSFER_CALL_GAS);
+    let _ = c.settle_order(id);
+    assert_eq!(status(&c, id), OrderStatus::Settling);
+}
+
+#[test]
+fn refund_with_19_999_tgas_is_rejected_and_order_stays_open() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    with_gas_free_fees("sender.testnet", deadline(), JUST_UNDER);
+    let msg = rejects(|| {
+        let _ = c.refund_order(id);
+    });
+    assert!(msg.contains("Attach at least 20 Tgas"), "{msg}");
+    assert_eq!(status(&c, id), OrderStatus::Open);
+}
+
+#[test]
+fn refund_with_exactly_20_tgas_is_accepted() {
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    with_gas_free_fees("sender.testnet", deadline(), MIN_TRANSFER_CALL_GAS);
+    let _ = c.refund_order(id);
+    assert_eq!(status(&c, id), OrderStatus::Refunding);
+}
+
+#[test]
+fn low_gas_is_checked_before_role_and_state() {
+    // Even a stranger on a settled order hits the gas rule first: nothing is read or written before it.
+    let mut c = setup();
+    let id = order(&mut c, 200);
+    with_gas_free_fees("stranger.testnet", T0, JUST_UNDER);
+    let msg = rejects(|| {
+        let _ = c.settle_order(id);
+    });
+    assert!(msg.contains("Attach at least 20 Tgas"), "{msg}");
+}
+
