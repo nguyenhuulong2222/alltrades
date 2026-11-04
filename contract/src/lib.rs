@@ -232,8 +232,12 @@ impl Contract {
 
 mod remit;
 pub use remit::*;
+mod autopilot;
+pub use autopilot::*;
 
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod remit_tests;
+#[cfg(test)]
+mod autopilot_tests;

@@ -36,6 +36,21 @@ Every job so far was paid by our own test client, and an operator starts each ag
 
 Remit follows the same pattern: the agent only drafts, a person signs `create_order`, and the payout script is started by hand for each order.
 
+**Jobs v2 autopilot: deployed on testnet; the worker ran on its own for 3 hours.** A contract extension and a background worker make the steps in the table above automatic, except payment by a real customer (see [Jobs v2 autopilot](#jobs-v2-autopilot-testnet-3-hour-worker-run)). It was tested twice on testnet on 2026-11-04:
+- **Supervised run:** we started the worker by hand, one pass at a time (`--once`). It delivered a job and later finalized it, and it stopped on `agent/STOP` and on the contract pause. A client dispute was refunded by the owner.
+- **3-hour soak run:** the worker ran by itself in `--loop` mode, with a simulated client and a monitor. It delivered and got paid for 7/7 jobs, handled a dispute and a cancel, and recovered from an `agent/STOP` drill.
+
+"Unattended" here describes only how the worker was operated. **The clients are simulated** (a script using our own test account), **the worker does not find work on any external market**, and **the owner as dispute arbiter is acceptable for a demo only**. The table above describes the v1 flow; the table below describes v2. The full log is in [`docs/autopilot-checks.md`](docs/autopilot-checks.md).
+
+| Step | Jobs v2 on testnet (3-hour `--loop` worker run with a simulated client, 2026-11-04) |
+|---|---|
+| Find work | **Yes, on our own contract only.** The worker polls `get_open_jobs_v2` every 60 s. Jobs come from a simulated client; there is no external marketplace. |
+| Bid | Out of scope. There is no bidding, and NEAR AI Agent Market is out of scope before 2026-11-14. |
+| Do the work | **Yes.** Only for jobs whose `brief_id` and `brief_hash` match a fictional brief in `briefs/`. 7/7 jobs passed the quality gate in the run. |
+| Deliver | **Yes.** `submit_delivery_v2`, signed by the worker's function-call key. The contract checks the text against its hash, accepts at most 4096 bytes, and allows at most 10 deliveries per day. |
+| Get paid | **Yes, from simulated clients.** After the review window the worker calls `finalize_job_v2`, and the escrow becomes revenue. A disputed job is decided by the owner, which is acceptable for a demo only. No real customer has paid. |
+| Keep the books | **Yes.** Same industries and `total_revenue` as v1. After the run, revenue and contract balance reconciled exactly with the jobs. |
+
 ## Do X, see Y
 
 No keys or accounts needed for these.
@@ -45,7 +60,7 @@ You see each industry on the contract, with its budget, revenue, estimated cost,
 
 **2. Check that the agent has no full-access key.**
 ```bash
-curl -s https://rpc.testnet.near.org -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_access_key_list","finality":"final","account_id":"agent-long2222.testnet"}}'
+curl -s https://test.rpc.fastnear.com -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_access_key_list","finality":"final","account_id":"agent-long2222.testnet"}}'
 ```
 You see exactly one key, `ed25519:4UG4RCFqw2sSdXn7gAWLYXSkPjVH9NaiMpyK5nNuoQ4r`. It is a `FunctionCall` key limited to `submit_delivery` and `reallocate` on the contract. The original full-access key was deleted in [`H7B3B2G2…`](https://testnet.nearblocks.io/txns/H7B3B2G2zHG8xwEGapWW76DjsJwMJ8JLep7TQYjcSpyt).
 
@@ -71,13 +86,15 @@ NEAR RPC rejected the transfer during transaction validation, so it never reache
 
 **5. Run the tests.**
 ```bash
-npm install && npm test            # 90 tests: packs, quality gate, key check, reallocate throttle, Remit agent, payout script, dashboard data
-cd contract && cargo test          # 82 tests: jobs (16) and Remit orders (66)
+npm install && npm test            # 153 tests: packs, quality gate, key check, reallocate throttle, Remit agent, payout script, dashboard data, v2 worker, RPC failover, soak monitor
+cd contract && cargo test          # 154 tests: jobs v1 (16), Remit orders (66), Jobs v2 autopilot (72)
 ```
 
 **6. Add an industry.** Drop a JSON file into `packs/` (copy `packs/fitness.json`), then have the owner call `add_industry`. The agent picks it up on the next job. A pack with `risk` set to medical, legal, financial or tax is refused, as is one whose cost ceiling is at or above its price.
 
 ## Run it yourself
+
+**RPC.** Every script and both dashboard pages read testnet through `https://test.rpc.fastnear.com`, then fall back to `https://near-testnet.drpc.org` and `https://archival-rpc.testnet.fastnear.com` (see `agent/rpc.mjs`). Set `NEAR_RPC_URL` to put another endpoint first. On 2026-11-04 the old `rpc.testnet.near.org` started answering HTTP 429 "THIS ENDPOINT IS DEPRECATED", so it is no longer used. near-cli-rs 0.30's built-in `testnet` network already uses FastNEAR.
 
 Requirements: Node 20.6+ (for `--env-file`), Rust with `cargo-near` 0.22, `near-cli-rs` 0.30, a NEAR AI Cloud API key, and three testnet accounts (owner, agent, client).
 
@@ -153,6 +170,31 @@ Before sending anything, the agent derives the public key from `AGENT_FC_PRIVATE
 - **Risky industries are blocked.** Packs marked medical, legal, financial or tax are refused because they need a licensed human.
 - **Quality gate before delivery:** length limits, banned phrases per pack, and rejection of unfilled placeholders such as `[Salon Name]` or `{{city}}`. Model chatter (word counts, "Here's your post:", "Let me know…") is stripped before hashing.
 - **NEAR AI calls time out after 120 s.** On timeout nothing is submitted on chain.
+
+## Jobs v2 autopilot (testnet, 3-hour worker run)
+
+> **Status: deployed to testnet on 2026-11-04 (code hash `9RukY7tq…RWzV`).** [`docs/autopilot-checks.md`](docs/autopilot-checks.md) logs:
+> - **A supervised run** (`--once`, started by hand): deliver, finalize, a dispute with a refund, and both stop drills.
+> - **A 3-hour soak run** (`--loop`): the worker ran without anyone starting each pass. A simulated client script created jobs and a monitor watched the run. 7/7 jobs were delivered and paid, a dispute was ruled for the worker, a cancel happened before delivery, and an `agent/STOP` drill was run. Revenue, escrow and balances reconciled exactly.
+> - **A first soak attempt** that tripped after 4 minutes because the old public RPC was deprecated. The monitor paused autopilot as designed, and the RPC failover fix followed. Failover was later checked live by pointing the worker at a broken endpoint.
+>
+> **Clients are simulated, there is no external marketplace, and the owner arbitrates disputes, which is acceptable for a demo only.** Autopilot is left **paused**.
+
+The goal is that people only set limits. The owner configures the worker account, the review window, a minimum job price, a daily delivery limit (at most 10), and a pause switch. After that:
+
+1. A client pays into escrow with `create_job_v2(industry, brief_id, brief_hash)`. A brief is never free text: it must be one of the **fictional** briefs in [`briefs/`](briefs/), identified by its id and the SHA-256 of its text. The catalog loader refuses briefs not marked fictional and anything that looks like a phone number, email address or long number.
+2. The worker (`agent/worker.mjs --loop`) finds Open v2 jobs and checks the brief hash against the catalog. It writes the deliverable with NEAR AI, runs the quality gate, and calls `submit_delivery_v2`. The deliverable text travels in the transaction arguments, so it is public. The contract checks it against the hash and accepts at most 4096 bytes. Only the hash is stored.
+3. The client has a review window, 300 s to 7 days and set by the owner, to `dispute_job_v2`. After the window, anyone can call `finalize_job_v2`; the escrow becomes revenue exactly once. **A client cannot take the work and refund after the window.** Cancelling is only possible before delivery.
+4. **Disputes are decided by the owner** (`resolve_dispute_v2`). **That is acceptable for a demo only.** A real service would need an independent arbiter. A refund ruling goes through the same callback pattern as Remit: the job becomes Refunded only if the transfer succeeds.
+
+Limits and stop paths:
+- **On chain:** per-job cost cap, per-industry budget, at most 10 deliveries per day, the 4096-byte limit, and `set_autopilot_paused` to stop new jobs, deliveries and finalization. `set_worker` locks out a compromised worker key.
+- **In the worker:** jobs per pass, attempts per job, a daily AI cost budget, a single-instance lock, and the file `agent/STOP`, checked before every action.
+- **Restart safety:** state is written before each model call, and finalization is driven by what the chain shows, so a lost state file cannot strand a payment.
+
+Storage: v2 lives under its own keys (`ap:*`), like Remit. The `Contract` struct is unchanged, so a deploy needs no migration, and v1 jobs keep their old rules.
+
+Tests: `cargo test` has 72 autopilot tests. They cover config, create, deliver, the daily limit, finalize-once, disputes, the closed window, cancel, owner rulings, callbacks, escrow vs. revenue, and v1/Remit isolation. `npm test` has worker tests against an in-memory contract with no network: catalog, skipping, limits, STOP, pause, finalize, restart recovery, sync after owner rulings, transient RPC errors without duplicate delivery, and the lock. It also has RPC failover tests (429, 5xx, timeout, network errors, persistent outage).
 
 ## Remit (simulated USD → VND transfers)
 

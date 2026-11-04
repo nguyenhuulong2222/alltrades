@@ -12,3 +12,7 @@ notes/
 .claude/
 skills-lock.json
 HANDOFF.md
+.worker-state.json
+.worker-state.json.tmp
+.worker.lock
+agent/STOP
