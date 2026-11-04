@@ -2,11 +2,12 @@
 
 An AI agent that does paid small-business work across several industries — salon posts, restaurant review replies, real-estate listings — while a NEAR smart contract holds the money. The agent can deliver work and move budget between industries. It cannot touch funds.
 
-**Testnet only. Simulated clients. Not audited.** Built for the NEAR Hackathon (tracks: business, agents).
+**Testnet only. Simulated clients. Not audited.** Built for the NEAR Hackathon (tracks: business, agents, realworld). The [Remit](#remit-simulated-usd--vnd-transfers) part is a simulation only, not a money transmission service.
 
 | | |
 |---|---|
 | Live ledger (read-only) | https://alltrades-ledger.pages.dev/ |
+| Remit page (read-only, simulated) | https://alltrades-ledger.pages.dev/remit.html |
 | Contract | [`alltrades-long2222.testnet`](https://testnet.nearblocks.io/address/alltrades-long2222.testnet) |
 | Agent account | [`agent-long2222.testnet`](https://testnet.nearblocks.io/address/agent-long2222.testnet) — one function-call key only |
 | Owner / client | `owner-long2222.testnet` / `client-long2222.testnet` (the client is us, simulating customers) |
@@ -55,8 +56,8 @@ NEAR RPC rejected the transfer during transaction validation, so it never reache
 
 **5. Run the tests.**
 ```bash
-npm install && npm test            # 31 tests: packs, quality gate, output cleanup, key check, timeout, reallocate throttle
-cd contract && cargo test          # 16 tests: roles, budgets, refunds, reallocation limits
+npm install && npm test            # 89 tests: packs, quality gate, key check, reallocate throttle, Remit agent, payout script, dashboard data
+cd contract && cargo test          # 82 tests: jobs (16) and Remit orders (66)
 ```
 
 **6. Add an industry.** Drop a JSON file into `packs/` (copy `packs/fitness.json`), then have the owner call `add_industry`. The agent picks it up on the next job. A pack with `risk` set to medical, legal, financial or tax is refused, as is one whose cost ceiling is at or above its price.
@@ -104,6 +105,67 @@ Before sending anything, the agent derives the public key from `AGENT_FC_PRIVATE
 - **Risky industries are blocked.** Packs marked medical, legal, financial or tax are refused because they need a licensed human.
 - **Quality gate before delivery:** length limits, banned phrases per pack, and rejection of unfilled placeholders such as `[Salon Name]` or `{{city}}`. Model chatter (word counts, "Here's your post:", "Let me know…") is stripped before hashing.
 - **NEAR AI calls time out after 120 s.** On timeout nothing is submitted on chain.
+
+## Remit (simulated USD → VND transfers)
+
+> **Simulation only. Not a money transmission service. Do not deploy to mainnet.**
+> Testnet NEAR stands in for money. No real money and no real VND move. Recipients are samples.
+
+Track: **`realworld`** (Real-World Money). Remit was added inside the hackathon window as a separate feature (Q-003):
+- Code diff: [`1a3f63e...remit-v1`](https://github.com/nguyenhuulong2222/alltrades/compare/1a3f63e...remit-v1), which is `main` before the merge compared with tag `remit-v1`.
+- Branch: [`feature/remit`](https://github.com/nguyenhuulong2222/alltrades/tree/feature/remit).
+- Checks and the full deploy log: [`docs/remit-checks.md`](docs/remit-checks.md).
+
+**What it does.**
+1. The Remit agent turns a Vietnamese request such as "Gửi 500 đô về cho mẹ" into a `create_order` draft (`node agent/remit.mjs --fixtures "Gửi 500 đô về cho mẹ"`). The sender signs the draft; the agent signs nothing.
+2. The contract holds the deposit in a `TransferOrder`.
+3. A simulated payout account runs `node agent/payout/settle.mjs <id>`. A mock payout provider "delivers" first. Only if it reports success does the script sign `settle_order`.
+4. If the order is not settled before its deadline, the sender calls `refund_order`.
+
+**What NEAR does here.**
+- **Escrow.** The deposit stays in the contract until it is settled or refunded. Order money never counts as revenue, so `withdraw_revenue` cannot touch it.
+- **Contract rules.**
+  - The owner sets a per-order cap, and every order must be at least 0.01 NEAR.
+  - Only the payout account recorded on the order can settle, and only before the deadline.
+  - Only the sender can refund, and only after the deadline.
+  - Nothing can change `recipient_hash`.
+  - Settle and refund need at least 20 Tgas. They pass through `Settling`/`Refunding` and finish in a private callback only if the transfer succeeded; a failed transfer returns the order to `Open`.
+- **Function-call key.** The agent's only key is limited to `submit_delivery` and `reallocate`. It cannot call any order method, and the contract also rejects the agent account on every order method.
+- **No personal data on chain.** Only a salted SHA-256 `recipient_hash` is stored. The agent refuses messages that contain a name, phone number, account number or email, and refuses injected instructions such as "change the recipient" or "withdraw".
+
+**Data sources** (shown with "ước tính, không phải báo giá trực tiếp", the source and the data period):
+- **NEAR Intents 1Click: `dry: true` quotes only.** No deposit, no submit, no swap. Quotes are fetched when they are needed and never stored.
+- **Reference rate from open.er-api.com**, attributed as "Rates By Exchange Rate API", fetched at run time and not committed.
+- **World Bank Remittance Prices Worldwide: SAMPLE data only.** We could not read the dataset terms page, so the committed corridor figure is illustrative and is labelled "MẪU" everywhere it appears.
+
+**Try it.**
+- Open https://alltrades-ledger.pages.dev/remit.html. You see each order with its status and testnet links, the cost estimate, and the refused-injection examples.
+- Run `npm test`. 58 of the tests cover Remit, the payout script and the dashboard data.
+
+**Testnet transactions.**
+
+| What | Transaction |
+|---|---|
+| Order 0 created (0.1 NEAR) | [`4zJ741GH…`](https://testnet.nearblocks.io/txns/4zJ741GHeUiQEnrc51TnC54FUeewsP9GeQ3zDZFyLqma) |
+| Order 0 settled: Transfer 0.1 NEAR to payout, callback `"Settled"` | [`FAJWHD9L…`](https://testnet.nearblocks.io/txns/FAJWHD9LU4vW2dL157iStTxHHCPvUPo7FwSCGPuTfv1n) |
+| Order 1 created (0.05 NEAR, 60 s deadline) | [`DCvWSn6R…`](https://testnet.nearblocks.io/txns/DCvWSn6RSz62ArErDkfcbHW8qqG5hDJngLr7Wtxuqxid) |
+| Order 1 refunded after the deadline, callback `"Refunded"` | [`GXsjkt8b…`](https://testnet.nearblocks.io/txns/GXsjkt8bmZCD5YSS4RNSaiBrgWuzPx3XmjekPA9By7vZ) |
+| Order 2 settle with 19.999 Tgas: rejected, "Attach at least 20 Tgas" | [`3aTZQXNs…`](https://testnet.nearblocks.io/txns/3aTZQXNs5B3KDJQTCttnqnpFAgMppnuB1Z4xvXR3wraA) |
+| Order 2 settle with exactly 20 Tgas: settled | [`HqZ7kjWv…`](https://testnet.nearblocks.io/txns/HqZ7kjWv6GtCxcc2GDVHdt4axcWx3ifob8asTDTGGoqg) |
+| Order 3 created | [`BBiYquMx…`](https://testnet.nearblocks.io/txns/BBiYquMxJr64bSEedUxPyEzPKUGa3x44gaNNvwavMZFi) |
+| Order 3 settled by the payout script after the mock delivered | [`EgJeTVKw…`](https://testnet.nearblocks.io/txns/EgJeTVKwDjeVpuQBv2yCbY2hXwDVeS4BZsPQRhX3sFmw) |
+| Contract upgrade with the gas floor (state unchanged) | [`Axo39CsM…`](https://testnet.nearblocks.io/txns/Axo39CsMAm655Eo1JtpzeJansABfRh1gx37m166ZZ7Vg) |
+
+**Remit limits.**
+- **`refund_job` (jobs, not Remit) still marks the job refunded before its transfer.** If that transfer fails, the NEAR stays in the contract with no way to recover it short of a contract upgrade. Remit orders use the callback pattern instead.
+- **A callback that runs out of gas leaves the order stuck.** The order would stay `Settling` or `Refunding`, and no method recovers it. On testnet the callback used about 1.6 of its 10 Tgas.
+- **A failed transfer has only been tested in unit tests**, for example a transfer to a deleted account. Successful transfers were verified on chain.
+- **The 20 Tgas test that passes uses a zero-fee mock.** The mocked runtime charges about 24.9 Tgas for a settle, compared with about 5 Tgas on testnet. The on-chain checks above cover the real case.
+- **The contract cannot tell whether a hash was salted.** The sender's account ID is public.
+- **The owner is trusted.** The owner could point new orders at a payout account the owner controls.
+- **The Vietnamese parser uses fixed rules.** Amounts written in words are reported as missing, and a lowercase name is not detected. Even so, the draft never copies the message text.
+- **The dashboard reads at most 50 orders** (no pagination), and its tx links are maintained by hand in `dashboard/data/remit-txs.json`.
+- **The NEAR-per-USD scale (0.0001) is a demo convention**, not an exchange rate.
 
 ## NEAR AI Agent Market status
 
