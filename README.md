@@ -36,9 +36,9 @@ Every job so far was paid by our own test client, and an operator starts each ag
 
 Remit follows the same pattern: the agent only drafts, a person signs `create_order`, and the payout script is started by hand for each order.
 
-**Jobs v2 autopilot: written and unit-tested, NOT deployed.** On branch `feature/autopilot` there is a contract extension and a background worker meant to make every step above automatic except payment by a real customer (see [Jobs v2 autopilot](#jobs-v2-autopilot-not-deployed)). None of it has run on testnet yet. Until it does, the table above is the state of the live system.
+**Jobs v2 autopilot: deployed on testnet, one supervised cycle verified, no continuous run yet.** On branch `feature/autopilot` there is a contract extension and a background worker meant to make every step above automatic except payment by a real customer (see [Jobs v2 autopilot](#jobs-v2-autopilot-testnet-one-cycle)). On 2026-11-04 the worker, started by hand with `--once`, did the following on testnet: it delivered a job and later finalized it, and it stopped on `agent/STOP` and on the contract pause. A client dispute was refunded by the owner. The log is in [`docs/autopilot-checks.md`](docs/autopilot-checks.md). The worker has not yet run unattended in `--loop` mode. Until it does, the table above remains the state of the live system.
 
-| Step | In code and unit tests (not on chain yet) |
+| Step | Jobs v2 (code, tests, one testnet cycle) |
 |---|---|
 | Find work | The worker reads `get_open_jobs_v2` in a loop. |
 | Bid | Out of scope. There is no bidding, and NEAR AI Agent Market is out of scope before 2026-11-14. |
@@ -165,9 +165,9 @@ Before sending anything, the agent derives the public key from `AGENT_FC_PRIVATE
 - **Quality gate before delivery:** length limits, banned phrases per pack, and rejection of unfilled placeholders such as `[Salon Name]` or `{{city}}`. Model chatter (word counts, "Here's your post:", "Let me know…") is stripped before hashing.
 - **NEAR AI calls time out after 120 s.** On timeout nothing is submitted on chain.
 
-## Jobs v2 autopilot (not deployed)
+## Jobs v2 autopilot (testnet, one cycle)
 
-> **Status: code and unit tests only, on branch `feature/autopilot`. Not deployed to testnet, and no worker has run against a real chain.** This section describes the design. It is not evidence that the design works on chain.
+> **Status: deployed to testnet on 2026-11-04 (code hash `9RukY7tq…RWzV`).** One supervised cycle is logged in [`docs/autopilot-checks.md`](docs/autopilot-checks.md): deliver, finalize, dispute with refund, and both stop drills. No unattended `--loop` run has been done yet. Autopilot is left **paused**.
 
 The goal is that people only set limits. The owner configures the worker account, the review window, a minimum job price, a daily delivery limit (at most 10), and a pause switch. After that:
 
