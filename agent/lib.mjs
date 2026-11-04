@@ -8,8 +8,20 @@ const BLOCKED_RISK = new Set(['medical', 'legal', 'financial', 'tax']);
 export function validatePack(pack) {
   for (const key of REQUIRED) if (pack[key] === undefined) throw new Error(`Pack missing ${key}`);
   if (BLOCKED_RISK.has(pack.risk)) throw new Error(`Risk ${pack.risk} needs a licensed human`);
+  if (pack.risk === 'payments-info') validatePaymentsInfo(pack);
   if (pack.max_cost_near >= pack.price_near) throw new Error(`Pack ${pack.id} cannot make a profit`);
   return pack;
+}
+
+export const ESTIMATE_LABEL = 'ước tính, không phải báo giá trực tiếp';
+const PAYMENTS_INFO_RULES = ['sourced_data_only', 'no_provider_selection', 'no_investment_advice', 'no_custody', 'no_signing', 'show_data_period'];
+
+/** payments-info: information about transfer costs only. Every limit must be switched on explicitly. */
+function validatePaymentsInfo(pack) {
+  const rules = pack.payments_info ?? {};
+  const off = PAYMENTS_INFO_RULES.filter((r) => rules[r] !== true);
+  if (off.length) throw new Error(`Pack ${pack.id}: payments-info requires ${off.join(', ')}`);
+  if (rules.estimate_label !== ESTIMATE_LABEL) throw new Error(`Pack ${pack.id}: payments-info requires the estimate label "${ESTIMATE_LABEL}"`);
 }
 
 export function loadPacks(dir) {
