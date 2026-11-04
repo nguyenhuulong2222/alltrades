@@ -1,0 +1,10 @@
+{
+  "_fixture": "SYNTHETIC test data in the open.er-api.com response shape. The VND value is deliberately unrealistic; it is not a real rate.",
+  "result": "success",
+  "provider": "https://www.exchangerate-api.com",
+  "terms_of_use": "https://www.exchangerate-api.com/terms",
+  "time_last_update_utc": "Thu, 01 Jan 2026 00:02:31 +0000",
+  "time_next_update_utc": "Fri, 02 Jan 2026 00:32:41 +0000",
+  "base_code": "USD",
+  "rates": { "USD": 1, "VND": 10000 }
+}

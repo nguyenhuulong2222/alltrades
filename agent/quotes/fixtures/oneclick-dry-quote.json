@@ -1,0 +1,17 @@
+{
+  "_fixture": "SYNTHETIC test data in the 1Click response shape. Not a real API response; numbers are made up.",
+  "quote": {
+    "amountIn": "500000000",
+    "amountInFormatted": "500.0",
+    "amountInUsd": "500.00",
+    "minAmountIn": "500000000",
+    "amountOut": "499000000",
+    "amountOutFormatted": "499.0",
+    "amountOutUsd": "499.00",
+    "minAmountOut": "494010000",
+    "timeEstimate": 20
+  },
+  "signature": "fixture",
+  "timestamp": "2026-01-01T00:00:00.000Z",
+  "correlationId": "fixture"
+}
