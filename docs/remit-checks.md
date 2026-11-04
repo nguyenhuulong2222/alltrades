@@ -66,3 +66,15 @@ Sources:
 - No real VND moves. The payout partner is simulated.
 - Off-chain, a dry 1Click quote can show what the stablecoin leg would cost. The World Bank figure for the corridor and an attributed mid-market rate can give context.
 - Recipient details stay off-chain. Only a salted SHA-256 hash is stored.
+
+## 5. Transfer safety and known limits (added 2026-11-04)
+
+- **Minimum order: 0.01 NEAR** (`MIN_ORDER_AMOUNT` constant). The contract pays each order's storage, so dust orders are refused. The owner's cap cannot be set below this minimum.
+- **Two-step transfers.**
+  - `settle_order` moves the order to `Settling`, and `refund_order` moves it to `Refunding`. Each then sends the NEAR and schedules the private callback `on_order_transfer`.
+  - On success, the callback marks the order `Settled` or `Refunded`.
+  - On failure, for example when the receiving account no longer exists, NEAR returns the transfer to the contract and the callback puts the order back to `Open`. The deposit is not lost. The payout account can retry before the deadline, and the sender can refund after it.
+  - While an order is `Settling` or `Refunding`, any settle or refund call is rejected with "Order has a transfer in progress".
+  - The callback can only be called by the contract itself: `#[private]`, plus the same check in the method body.
+- **`refund_job` is unchanged and still has the old weakness.** It marks the job `Refunded` before its transfer. If that transfer fails, the NEAR returns to the contract, but the job stays `Refunded` and is counted in neither revenue nor any open job. It can then only be recovered by a contract upgrade. This change applies to Remit orders only.
+- **Callback gas.** The callback is given 10 Tgas. Call `settle_order` and `refund_order` with at least 50 Tgas. If the callback runs out of gas, the order stays `Settling` or `Refunding` and no method can recover it. A future fix could add an owner-only `resolve_stuck_order`. That has not been built.
