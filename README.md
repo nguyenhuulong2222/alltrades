@@ -85,6 +85,7 @@ NEAR RPC rejected the transfer during transaction validation, so it never reache
 | First fitness delivery (job 10) | [`4x7dx1Qr…`](https://testnet.nearblocks.io/txns/4x7dx1Qr6796MaygEjWZQpGHfAokDQZuLzKTED3xtMef) |
 | Owner adds a new industry (auto-repair) live, recorded for the demo video | [`5L1KYMiX…`](https://testnet.nearblocks.io/txns/5L1KYMiXNppAom99RAZWnFpcurvmShbkGc1eCpcj2d93) |
 | Demo video job 11 (beauty): client creates, agent delivers (`4UG4…`), client approves | [`7ecxhdBq…`](https://testnet.nearblocks.io/txns/7ecxhdBqXoEMsHySzGMYediBxcjugWHANttTtvD29ApN), [`8gNTt6oX…`](https://testnet.nearblocks.io/txns/8gNTt6oXS7mfaX3oryrRxDPfxqkWkao46ULod7sxcQaE), [`4BZ9MYiY…`](https://testnet.nearblocks.io/txns/4BZ9MYiYYGgStdDmUDAnH4KsNQKBScwyd6nC7y7Vi3Cy) |
+| First auto-repair job (job 12): client creates, agent delivers (`4UG4…`), client approves | [`ChQsqkzH…`](https://testnet.nearblocks.io/txns/ChQsqkzH7cryBrpzB25ERNJo8xktSktf41gcokQcYs6d), [`E8DpLJdp…`](https://testnet.nearblocks.io/txns/E8DpLJdpmHfPs9YmohKiFCRdNEybZqkPMe57FB9PL3Qf), [`8jP89BTZ…`](https://testnet.nearblocks.io/txns/8jP89BTZ5XkT4kD9focLA6XcnRiNCM9Srk61YgT6NSgY) |
 
 **5. Run the tests.**
 ```bash
@@ -291,7 +292,10 @@ Track: **`realworld`** (Real-World Money). Remit was added inside the hackathon 
 
 ## AI-assisted development
 
-The contract, agent, tests, dashboard, industry packs and this README were written mainly by Claude (Anthropic), through claude.ai and Claude Code, under the author's direction. The author chose the product direction, made the final decisions, ran the deployment steps that required his accounts and keys, and authorized the testnet runs. Generated deliverables in the demo come from NEAR AI Cloud at run time.
+- **Code.** The contract, agent, tests, dashboard, industry packs and this README were written mainly by Claude (Anthropic), through claude.ai and Claude Code, under the author's direction. The author chose the product direction, made the final decisions, ran the steps that needed the author's own accounts and keys, and authorized every testnet run.
+- **Deliverables.** The posts and messages the agent delivers are generated at run time by NEAR AI Cloud.
+- **Demo video.** The voice-over was generated with OpenAI TTS. The opening and closing shots were generated with Google Flow (the opening is a still crop of a Flow clip); they show no product, data or people.
+- **Product proof is real.** Every scene that shows the product in the demo video is a real screen recording of real commands and real testnet data: the terminals, transactions, ledger, autopilot and Remit pages. Those scenes were only trimmed and sped up; nothing in them was generated, added or altered.
 
 ## License
 
