@@ -83,10 +83,12 @@ NEAR RPC rejected the transfer during transaction validation, so it never reache
 | Client refunds a food job | [`aoHFMgyo…`](https://testnet.nearblocks.io/txns/aoHFMgyoRkSVizUjKwiG4CJvBJAni5m5JiqFcvEgSgq) |
 | Owner adds a new industry (fitness) live | [`8fT4ZcDg…`](https://testnet.nearblocks.io/txns/8fT4ZcDgkb5n4tWsmBJjrZZ5hHDWguqScaDmsLQ9xZ9W) |
 | First fitness delivery (job 10) | [`4x7dx1Qr…`](https://testnet.nearblocks.io/txns/4x7dx1Qr6796MaygEjWZQpGHfAokDQZuLzKTED3xtMef) |
+| Owner adds a new industry (auto-repair) live, recorded for the demo video | [`5L1KYMiX…`](https://testnet.nearblocks.io/txns/5L1KYMiXNppAom99RAZWnFpcurvmShbkGc1eCpcj2d93) |
+| Demo video job 11 (beauty): client creates, agent delivers (`4UG4…`), client approves | [`7ecxhdBq…`](https://testnet.nearblocks.io/txns/7ecxhdBqXoEMsHySzGMYediBxcjugWHANttTtvD29ApN), [`8gNTt6oX…`](https://testnet.nearblocks.io/txns/8gNTt6oXS7mfaX3oryrRxDPfxqkWkao46ULod7sxcQaE), [`4BZ9MYiY…`](https://testnet.nearblocks.io/txns/4BZ9MYiYYGgStdDmUDAnH4KsNQKBScwyd6nC7y7Vi3Cy) |
 
 **5. Run the tests.**
 ```bash
-npm install && npm test            # 153 tests: packs, quality gate, key check, reallocate throttle, Remit agent, payout script, dashboard data, v2 worker, RPC failover, soak monitor
+npm install && npm test            # 158 tests: packs, quality gate, key check, reallocate throttle, Remit agent, payout script, dashboard data, v2 worker, RPC failover, soak monitor
 cd contract && cargo test          # 154 tests: jobs v1 (16), Remit orders (66), Jobs v2 autopilot (72)
 ```
 
@@ -245,6 +247,7 @@ Track: **`realworld`** (Real-World Money). Remit was added inside the hackathon 
 | Order 3 created | [`BBiYquMx…`](https://testnet.nearblocks.io/txns/BBiYquMxJr64bSEedUxPyEzPKUGa3x44gaNNvwavMZFi) |
 | Order 3 settled by the payout script after the mock delivered | [`EgJeTVKw…`](https://testnet.nearblocks.io/txns/EgJeTVKwDjeVpuQBv2yCbY2hXwDVeS4BZsPQRhX3sFmw) |
 | Order 4: created and settled from a fresh clone, following "Run it yourself" steps 9–11 | [`A4vtNJz9…`](https://testnet.nearblocks.io/txns/A4vtNJz9XFQMZ8zsjmTbYWvJ2wKmvyBhFpAYQWa16d4m), [`CoUcAWV1…`](https://testnet.nearblocks.io/txns/CoUcAWV1ye5jqwZHts6JL77cCACqPthgvfCyoX38SY7n) |
+| Order 5 (demo video): the sender signs the draft from "Gửi 500 đô về cho mẹ", then the payout script settles after the mock delivered | [`FSvrPTjK…`](https://testnet.nearblocks.io/txns/FSvrPTjKcLZ6krUe26cKhRMjJqSyrPGAX4rgp3EkaQY), [`35Xh16P6…`](https://testnet.nearblocks.io/txns/35Xh16P61dKqS2NsNQLRXN5XjA24tiRB7zrT4GDKPqEY) |
 | Contract upgrade with the gas floor (state unchanged) | [`Axo39CsM…`](https://testnet.nearblocks.io/txns/Axo39CsMAm655Eo1JtpzeJansABfRh1gx37m166ZZ7Vg) |
 
 **Remit limits.**

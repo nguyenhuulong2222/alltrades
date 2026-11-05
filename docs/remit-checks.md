@@ -122,3 +122,7 @@ All on testnet. Explorer links: https://testnet.nearblocks.io/txns/<hash>
 - Step 11: `settle.mjs 4 --contract … --payout …` sent tx `CoUcAWV1ye5jqwZHts6JL77cCACqPthgvfCyoX38SY7n`. The transfer was 0.05 NEAR and the callback returned `"Settled"`.
 - Step 12: the clone's dashboard showed order #4 as settled.
 - Steps 7–8 were not re-run, because the payout account and config already exist. The same commands ran earlier, in tx `6WsJAAVQ…` and `EWu9F3ym…`.
+
+## Demo video take (2026-11-05 UTC)
+- Draft from `node agent/remit.mjs --fixtures "Gửi 500 đô về cho mẹ"`; the withdraw injection was refused.
+- Order 5 (0.05 NEAR): the sender signed `create_order` (`FSvrPTjKcLZ6krUe26cKhRMjJqSyrPGAX4rgp3EkaQY`); `agent/payout/settle.mjs 5` settled it after the mock delivered (`35Xh16P61dKqS2NsNQLRXN5XjA24tiRB7zrT4GDKPqEY`).

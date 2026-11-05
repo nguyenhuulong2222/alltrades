@@ -93,3 +93,8 @@ Every 60 s the monitor checks for stuck refunds (over 2 min), revenue/escrow/bal
 - `NEAR_RPC_URL=https://broken-rpc.invalid node --env-file=.env agent/worker.mjs --once` made 1 retry and 1 endpoint switch, then read `paused: true` from the fallback. Nothing was sent.
 - With `NEAR_RPC_URL=https://rpc.testnet.near.org` as primary, the old endpoint answered normally this time, so there was no switch. It remains out of the defaults.
 - The worker now syncs local state for jobs settled without its own finalize: a job in Disputed becomes `disputed`, a Paid job settled by an owner ruling becomes `settled`, and a Refunded job becomes `closed`. Job 5's stale local entry will be synced on the first pass after unpausing.
+
+### Demo video take (2026-11-05 UTC)
+- Autopilot was unpaused only for the take (tx `Ft5MwFH46RwXQ59ZeLLHiFDEKAUHtGstXerN215KfXVp`) and paused right after the STOP drill (tx `5AdkiJfaexx1Q68craWZLSu9g7XUPSSHjH7RACinAEJG`).
+- Job 10 (makai-fit-class, 0.15, simulated client): create `9i88qZNZ…`, deliver `ErjDFvg6…`. The worker exited on `agent/STOP`.
+- After the 10-minute review window, autopilot was unpaused once (tx `CFD9Fanb9QjUTMYfw1Gxp6iMCnKoQJi91y298bnAUKK8`), `worker.mjs --once` finalized job 10 (`437AuAYa…`, Paid), and autopilot was paused again (tx `J2wZLhTExK1f3fLZqYGpzg21bcYh9MJDQpPGrFz7of1a`). `get_autopilot` then showed `paused: true`.
