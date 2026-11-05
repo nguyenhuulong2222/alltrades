@@ -16,3 +16,10 @@ HANDOFF.md
 .worker-state.json.tmp
 .worker.lock
 agent/STOP
+
+# Demo video media (large, local only)
+video/raw/
+video/ai/
+video/audio/
+video/out/
+.DS_Store

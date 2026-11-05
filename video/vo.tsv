@@ -1,0 +1,13 @@
+# cue	shot	offset	lang	text	subtitle (optional; defaults to text)
+# offset = seconds after the shot starts. One TTS file per cue: video/audio/<cue>.wav
+01	01	0.2	en	Every small business has small jobs: a post, a quote, a repair estimate.
+02	02	0.3	en	AllTrades is one AI agent that sells that work. A NEAR contract holds the money. The agent never does.
+03	03	0.5	en	A client pays into escrow. The agent writes the work with NEAR AI and records its hash on chain, signing with a key that can only call two methods.
+04	04	0.1	en	If a prompt injection told it to pay someone: NEAR RPC rejected the withdrawal, and NEAR RPC rejected the transfer.
+05	05	0.9	en	A new trade is one JSON file and one owner call. Auto repair is live.
+06	06	0.5	en	Autopilot: the worker watches the contract, works only on fictional catalog briefs, delivers, and is paid automatically after a review window. Disputes go to the owner. Demo only. One file or one switch stops it. Over a three-hour test, it delivered seven of seven jobs.
+07a	07	0.3	en	Remit is a simulation. A request in Vietnamese,
+07b	07	4.5	vi	Gửi 500 đô về cho mẹ	Gửi 500 đô về cho mẹ — “Send $500 home to Mom”
+07c	07	7.7	en	becomes a transfer draft the sender signs. NEAR escrows it, and a mock payout settles before the deadline. Injected instructions are refused. Not a money transmission service.
+08	08	0.5	en	One agent, many trades, and the money held by code.
+09	09	0.1	en	AllTrades. Testnet, simulated clients, real contract.
