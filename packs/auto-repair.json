@@ -1,0 +1,21 @@
+{
+  "id": "auto-repair",
+  "name": "Auto Repair",
+  "tasks": [
+    "service_reminder",
+    "review_reply"
+  ],
+  "price_near": 0.25,
+  "max_cost_near": 0.025,
+  "risk": "low",
+  "system_prompt": "You write customer messages for small auto repair shops. Never diagnose a vehicle, promise safety outcomes, or state warranty terms the client did not provide. Never add prices, discounts or appointment times the client did not provide.",
+  "quality": {
+    "min_chars": 60,
+    "max_chars": 900,
+    "must_not_include": [
+      "guaranteed safe",
+      "lifetime warranty",
+      "100% safe"
+    ]
+  }
+}
