@@ -125,7 +125,11 @@ def render(shots, cues, total):
     parts = []
     for s in shots:
         dst = os.path.join(TMP, f"shot-{s['id']}.mp4")
-        vf = (f"setpts=PTS/{s['speed']},scale={W}:{H}:force_original_aspect_ratio=decrease,"
+        # Every shot gets identical colour tags (bt709, tv range). If one shot differs (e.g. a
+        # Flow/Veo clip tagged smpte170m), the decoder reconfigures mid-stream in the final pass,
+        # the filter graph is rebuilt, and the one-frame label/subtitle PNG overlays vanish.
+        vf = (f"setpts=PTS/{s['speed']},scale={W}:{H}:force_original_aspect_ratio=decrease"
+              f":out_color_matrix=bt709:out_range=tv,"
               f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black,fps={FPS},format=yuv420p")
         if s is shots[0]:
             vf += ",fade=t=in:st=0:d=0.8"
@@ -134,7 +138,8 @@ def render(shots, cues, total):
         inp = (["-loop", "1", "-i", s["src"]] if s["type"] == "still"
                else ["-ss", str(s["ss"]), "-i", s["src"]])
         run(["ffmpeg", "-y", "-v", "error", *inp, "-vf", vf, "-t", str(s["dur"]), "-an",
-             "-c:v", "libx264", "-crf", "16", "-preset", "medium", dst])
+             "-c:v", "libx264", "-crf", "16", "-preset", "medium", "-color_range", "tv",
+             "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", dst])
         parts.append(dst)
     lst = os.path.join(TMP, "concat.txt")
     with open(lst, "w") as f:
@@ -155,7 +160,7 @@ def render(shots, cues, total):
     run(["ffmpeg", "-y", "-v", "error", *ins, "-filter_complex", ";".join(flt),
          "-map", "[out]", "-ar", "48000", audio])
 
-    # 3. subtitles (.srt sidecar + soft track) and burned-in PNG overlays
+    # 3. subtitles: .srt sidecar + burned-in PNG overlays (no soft track)
     events = subtitle_events(cues)
     srt = os.path.join(OUT, "alltrades-demo.srt")
     with open(srt, "w", encoding="utf-8") as f:
@@ -172,16 +177,19 @@ def render(shots, cues, total):
              "-bordercolor", "#000000B0", "-border", "20x10", p])
         pngs.append((a, b, p))
 
-    ins = ["-i", video, "-i", audio, "-i", label] + sum((["-i", p] for _, _, p in pngs), [])
+    # -reinit_filter 0: never rebuild the graph mid-stream (that would drop the PNG overlays).
+    ins = ["-reinit_filter", "0", "-i", video, "-i", audio, "-i", label] + sum((["-i", p] for _, _, p in pngs), [])
     chain = ["[0:v][2:v]overlay=W-w-28:28[v0]"]
     for k, (a, b, _) in enumerate(pngs):
         chain.append(f"[v{k}][{k + 3}:v]overlay=(W-w)/2:H-h-70:"
                      f"enable='between(t,{a:.3f},{b:.3f})'[v{k + 1}]")
     final = os.path.join(OUT, "alltrades-demo.mp4")
-    run(["ffmpeg", "-y", "-v", "error", *ins, "-i", srt, "-filter_complex", ";".join(chain),
-         "-map", f"[v{len(pngs)}]", "-map", "1:a", "-map", f"{len(pngs) + 3}:s",
+    # Subtitles are burned in only; the .srt stays a sidecar file. No soft subtitle track,
+    # so players that auto-enable tracks do not show the text twice.
+    run(["ffmpeg", "-y", "-v", "error", *ins, "-filter_complex", ";".join(chain),
+         "-map", f"[v{len(pngs)}]", "-map", "1:a", "-sn", "-dn",
          "-c:v", "libx264", "-crf", "18", "-preset", "slow", "-pix_fmt", "yuv420p",
-         "-c:a", "aac", "-b:a", "192k", "-c:s", "mov_text", "-metadata:s:s:0", "language=eng",
+         "-c:a", "aac", "-b:a", "192k",
          "-t", str(total), "-movflags", "+faststart", final])
     print(f"Done: {final} ({duration(final):.1f}s)\n      {srt}")
     print("Now watch it fully: no 1Click, no .env, no key/token, label visible throughout.")

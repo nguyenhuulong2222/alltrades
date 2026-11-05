@@ -12,7 +12,7 @@
 06c	5	real	raw/06-scene3-autopilot.mov	160	17	Terminal: touch STOP, worker stops, pause tx (sped up)
 06d	3	real	raw/06-scene3-autopilot.mov	245.5	1	Terminal: get_autopilot shows paused true (real time)
 07	15	real	raw/07-scene4-remit.mov	0.8	5.7	Terminal: draft, injection refused, create_order, settle (sped up)
-07b	5	real	raw/07-scene4-remit.mov	88	1	Browser /remit: order #5 settled (real time)
-07c	4	real	raw/07-scene4-remit.mov	95.5	1	Browser /remit#audit: injection proof (real time, cost section never shown)
+07b	4.5	real	raw/07-scene4-remit.mov	89.5	1	Browser /remit: order #5 settled, after the page finished loading (real time)
+07c	4.5	real	raw/07-scene4-remit.mov	95.5	1	Browser /remit#audit: injection proof (real time, cost section never shown)
 08	6	ai	ai/veo-outro.mp4	0	1	Veo outro, no people/text/UI
 09	6	still	raw/09-endcard.png	0	1	Screenshot of Ledger (tab 1), held
